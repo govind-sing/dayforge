@@ -1,69 +1,52 @@
 name: Deploy
 
 on:
-push:
-branches:
-- main
+  push:
+    branches: [main]
 
 env:
-REGISTRY: ghcr.io
-BACKEND_IMAGE: ${{ github.repository }}/backend
+  REGISTRY: ghcr.io
+  BACKEND_IMAGE: ${{ github.repository }}/backend
 
 jobs:
-deploy-backend:
-runs-on: ubuntu-latest
+  deploy-backend:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
 
-```
-permissions:
-  contents: read
-  packages: write
+      - name: Log in to GHCR
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
 
-steps:
-  - uses: actions/checkout@v4
+      - name: Build and push backend image
+        uses: docker/build-push-action@v5
+        with:
+          context: ./backend
+          push: true
+          tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
 
-  - name: Login to GHCR
-    uses: docker/login-action@v3
-    with:
-      registry: ${{ env.REGISTRY }}
-      username: ${{ github.actor }}
-      password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Deploy to Railway
+        run: npx -y @railway/cli@latest up --service=${{ secrets.RAILWAY_BACKEND_SERVICE }} --detach
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
 
-  - name: Build and Push Backend
-    uses: docker/build-push-action@v5
-    with:
-      context: ./backend
-      push: true
-      tags: ${{ env.REGISTRY }}/${{ env.BACKEND_IMAGE }}:latest
+  deploy-frontend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
 
-  - name: Deploy to Railway
-    uses: bervProject/railway-deploy@main
-    env:
-      RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-    with:
-      service: ${{ secrets.RAILWAY_BACKEND_SERVICE }}
-```
-
-deploy-frontend:
-runs-on: ubuntu-latest
-
-```
-steps:
-  - uses: actions/checkout@v4
-
-  - name: Install Vercel CLI
-    run: npm install -g vercel@latest
-
-  - name: Deploy Frontend
-    working-directory: frontend
-    run: |
-      vercel pull --yes \
-        --environment=production \
-        --token=${{ secrets.VERCEL_TOKEN }}
-
-      vercel deploy \
-        --prod \
-        --token=${{ secrets.VERCEL_TOKEN }}
-    env:
-      VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
-      VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
-```
+      - name: Deploy to Vercel
+        working-directory: frontend
+        run: |
+          npx -y vercel@latest pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+          npx -y vercel@latest build --prod --token=${{ secrets.VERCEL_TOKEN }}
+          npx -y vercel@latest deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID }}
