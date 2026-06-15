@@ -17,7 +17,7 @@ app.add_middleware(
 async def global_exception_handler(request: Request, exc: Exception):
     print("UNHANDLED ERROR:", repr(exc))
     response = JSONResponse(status_code=500, content={"detail": str(exc)})
-    response.headers["Access-Control-Allow-Origin"] = "http://localhost:3000"
+    response.headers["Access-Control-Allow-Origin"] = "https://day-forge-ten.vercel.app"
     response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
