@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import { useState, useEffect, useCallback } from "react";
 import { TaskFormData } from "@/components/TaskRow";
@@ -74,7 +75,8 @@ export default function DashboardPage() {
   }, []);
 
   useEffect(() => {
-    loadData(date);
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    void loadData(date);
   }, [date, loadData]);
 
   const handleDateChange = (newDate: string) => {
@@ -83,7 +85,7 @@ export default function DashboardPage() {
   };
 
   const handleAddTask = async (task: Omit<TaskFormData, "id" | "status">) => {
-    const saved = await apiPost<TaskFormData>("/api/tasks/daily-plan", {
+    await apiPost<TaskFormData>("/api/tasks/daily-plan", {
       plan_date: date,
       tasks: [...highTasks, ...mediumTasks, ...lowTasks, task].filter(
         (t) => t.title.trim() !== "",
@@ -122,7 +124,8 @@ export default function DashboardPage() {
 
       setCompletedTaskIds((prev) => {
         const next = new Set(prev);
-        isDone ? next.add(taskId) : next.delete(taskId);
+        if (isDone) next.add(taskId)
+        else next.delete(taskId)
         return next;
       });
 
@@ -252,7 +255,7 @@ export default function DashboardPage() {
               "/api/blocked-slots",
               slot,
             );
-            setBlockedSlots((prev) => [...prev, saved]);
+            setBlockedSlots((prev) => [...prev, saved as BlockedSlotFormData]);
           }}
           onBlockedSlotUpdate={(index, updated) => {
             setBlockedSlots((prev) =>
@@ -273,15 +276,12 @@ export default function DashboardPage() {
             });
           }}
         />
-        
-        
       </div>
 
       {/* Chat */}
       <div className="w-72 shrink-0 bg-white flex flex-col h-full">
         <ChatPanel />
       </div>
-      
     </div>
   );
 }

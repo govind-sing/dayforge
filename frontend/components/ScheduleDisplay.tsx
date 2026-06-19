@@ -19,7 +19,7 @@ export default function ScheduleDisplay({ schedule }: { schedule: ScheduleRespon
       {/* Header */}
       <div className="flex items-center justify-between">
         <h2 className="text-xl font-semibold text-gray-800">
-          Today's Schedule
+          Today&apos;s Schedule
         </h2>
         <span className="text-sm text-gray-500">{schedule.plan_date}</span>
       </div>

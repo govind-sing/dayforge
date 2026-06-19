@@ -152,7 +152,7 @@ async def get_schedule(
             "summary": plan.data.get("raw_llm_output", ""),
         }
 
-    except Exception as e:
+    except Exception:
         return None
     
 
@@ -176,14 +176,14 @@ async def update_schedule_item(
 
         plan_id = plan.data["id"]
 
-        result = supabase.table("schedule_items")\
-            .update({
+        supabase.table("schedule_items")\
+                .update({
                 "scheduled_start": f"{payload.plan_date}T{payload.start_time}:00",
                 "scheduled_end": f"{payload.plan_date}T{payload.end_time}:00",
-            })\
-            .eq("plan_id", plan_id)\
-            .eq("task_id", task_id)\
-            .execute()
+                })\
+                .eq("plan_id", plan_id)\
+                .eq("task_id", task_id)\
+                .execute()
 
         return {"updated": True}
     except Exception as e:
