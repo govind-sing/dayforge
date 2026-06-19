@@ -1,10 +1,12 @@
 'use client'
 
 export interface TaskFormData {
+  id?: string
   title: string
   description: string
   estimated_minutes: number
   priority: 'high' | 'medium' | 'low'
+  status?: string
 }
 
 interface Props {

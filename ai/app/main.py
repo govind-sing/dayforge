@@ -1,14 +1,14 @@
 from fastapi import FastAPI, Request
-from fastapi.responses import JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
-from app.routers import tasks, blocked_slots  # priority_blocks removed
-from app.routers import profile
+from fastapi.responses import JSONResponse
+from app.core.config import settings
+from app.routers import schedule
 
-app = FastAPI(title="DayForge API")
+app = FastAPI(title="DayForge AI Service")
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["https://day-forge-ten.vercel.app","http://localhost:3000"],
+    allow_origins=[settings.FRONTEND_URL, "http://localhost:3000","https://day-forge-ten.vercel.app"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -22,10 +22,8 @@ async def global_exception_handler(request: Request, exc: Exception):
     response.headers["Access-Control-Allow-Credentials"] = "true"
     return response
 
-app.include_router(tasks.router)
-app.include_router(blocked_slots.router)
-app.include_router(profile.router)
+app.include_router(schedule.router, prefix="/api/ai")
 
-@app.get("/")
-def root():
-    return {"status": "DayForge API running"}
+@app.get("/health")
+async def health():
+    return {"status": "ok", "service": "dayforge-ai"}

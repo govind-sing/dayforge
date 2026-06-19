@@ -1,7 +1,7 @@
 import { type NextRequest } from 'next/server'
 import { createMiddlewareClient } from '@/lib/supabase-server'
 
-const PROTECTED_PATHS = ['/plan', '/schedule', '/checkin']
+const PROTECTED_PATHS = ['/plan', '/schedule', '/checkin','/dashboard']
 
 export default async function proxy(request: NextRequest) {
   const { supabase, response } = createMiddlewareClient(request)
@@ -21,7 +21,7 @@ export default async function proxy(request: NextRequest) {
   // If logged in and visiting /login, send them to /plan
   if (request.nextUrl.pathname === '/login' && user) {
     const url = request.nextUrl.clone()
-    url.pathname = '/plan'
+    url.pathname = '/dashboard'
     return Response.redirect(url)
   }
 
@@ -29,5 +29,5 @@ export default async function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ['/plan/:path*', '/schedule/:path*', '/checkin/:path*', '/login'],
+  matcher: [ '/schedule/:path*', '/checkin/:path*', '/dashboard/:path*', '/login'],
 }

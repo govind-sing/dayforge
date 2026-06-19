@@ -63,3 +63,7 @@ class BlockedSlotInput(BaseModel):
 
 class BlockedSlotOut(BlockedSlotInput):
     id: UUID
+
+class BlockedSlotUpdate(BaseModel):
+    start_time: time
+    end_time: time

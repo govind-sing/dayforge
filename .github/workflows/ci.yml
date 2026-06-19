@@ -23,6 +23,22 @@ jobs:
       - run: pip install ruff
       - run: ruff check .
 
+  ai-lint:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ai
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12.4'
+
+      - run: pip install -r requirements.txt
+      - run: pip install ruff
+      - run: ruff check .
+
   frontend-build:
     runs-on: ubuntu-latest
     defaults:
@@ -44,15 +60,19 @@ jobs:
           NEXT_PUBLIC_SUPABASE_URL: ${{ secrets.NEXT_PUBLIC_SUPABASE_URL }}
           NEXT_PUBLIC_SUPABASE_ANON_KEY: ${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }}
           NEXT_PUBLIC_API_URL: ${{ secrets.NEXT_PUBLIC_API_URL }}
+          NEXT_PUBLIC_AI_URL: ${{ secrets.NEXT_PUBLIC_AI_URL }}
 
   docker-build-check:
     runs-on: ubuntu-latest
-    needs: [backend-lint, frontend-build]
+    needs: [backend-lint, ai-lint, frontend-build]
     steps:
       - uses: actions/checkout@v4
 
       - name: Build backend image
         run: docker build -t dayforge-backend:ci ./backend
+
+      - name: Build ai image
+        run: docker build -t dayforge-ai:ci ./ai
 
       - name: Build frontend image
         run: |
@@ -60,4 +80,5 @@ jobs:
             --build-arg NEXT_PUBLIC_SUPABASE_URL=${{ secrets.NEXT_PUBLIC_SUPABASE_URL }} \
             --build-arg NEXT_PUBLIC_SUPABASE_ANON_KEY=${{ secrets.NEXT_PUBLIC_SUPABASE_ANON_KEY }} \
             --build-arg NEXT_PUBLIC_API_URL=${{ secrets.NEXT_PUBLIC_API_URL }} \
+            --build-arg NEXT_PUBLIC_AI_URL=${{ secrets.NEXT_PUBLIC_AI_URL }} \
             ./frontend
