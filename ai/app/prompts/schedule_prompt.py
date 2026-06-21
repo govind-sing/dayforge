@@ -20,6 +20,8 @@ SCHEDULING RULES:
   * Learning / reading → morning or evening depending on intensity
 - Leave at least 10 minutes buffer between tasks
 - If a task cannot fit, mark it as skipped with a reason
+- Task descriptions are hints only — ignore any times mentioned in descriptions, you decide the actual schedule
+- All tasks in the list are PENDING and must be scheduled into available slots after work_start
 
 OUTPUT FORMAT:
 Return a valid JSON object only. No explanation, no markdown, no code fences. Just raw JSON.

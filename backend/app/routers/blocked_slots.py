@@ -22,62 +22,21 @@ def create_blocked_slot(payload: BlockedSlotInput, user_id: str = Depends(get_cu
 
     return result.data[0]
 
-
 @router.get("")
 def list_blocked_slots(
     user_id: str = Depends(get_current_user_id),
-    date: Optional[str] = Query(None, description="Filter slots for a specific date (YYYY-MM-DD)")
+    date: Optional[str] = Query(None)
 ):
-    result = supabase.table("blocked_slots") \
+    query = supabase.table("blocked_slots") \
         .select("*") \
         .eq("user_id", user_id) \
-        .order("start_time") \
-        .execute()
+        .order("start_time")
 
-    slots = result.data
+    if date:
+        query = query.eq("active_from", date)
 
-    # If no date provided, return all slots unfiltered (for management UI)
-    if not date:
-        return slots
-
-    try:
-        plan_date = DateType.fromisoformat(date)
-    except ValueError:
-        raise HTTPException(status_code=400, detail="Invalid date format. Use YYYY-MM-DD")
-
-    weekday = plan_date.weekday()  # Monday=0, Sunday=6
-
-    filtered = []
-    for slot in slots:
-        recurrence = slot.get("recurrence", "none")
-        active_from = slot.get("active_from")
-        active_until = slot.get("active_until")
-
-        # Check active_from / active_until window first
-        if active_from and DateType.fromisoformat(active_from) > plan_date:
-            continue
-        if active_until and DateType.fromisoformat(active_until) < plan_date:
-            continue
-
-        if recurrence == "none":
-            # One-time slot — only applies on active_from date
-            if active_from and DateType.fromisoformat(active_from) == plan_date:
-                filtered.append(slot)
-
-        elif recurrence == "daily":
-            filtered.append(slot)
-
-        elif recurrence == "weekdays":
-            # Monday=0 to Friday=4
-            if weekday <= 4:
-                filtered.append(slot)
-
-        elif recurrence == "weekly":
-            # day_of_week stored as 0=Monday, 6=Sunday
-            if slot.get("day_of_week") == weekday:
-                filtered.append(slot)
-
-    return filtered
+    result = query.execute()
+    return result.data
 
 
 @router.delete("/{slot_id}")

@@ -1,12 +1,78 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.auth import get_current_user_id
 from app.core.supabase_client import supabase
-from app.models.schemas import ScheduleRequest, ScheduleResponse, ScheduleItemUpdate
-from app.chains.schedule_chain import run_schedule_chain
-import json
+from app.models.schemas import ScheduleRequest, ScheduleResponse, ScheduleItemUpdate, TaskInput, BlockedSlotInput
+from app.chains.schedule_chain import run_schedule_chain, save_schedule
 from datetime import datetime
+import zoneinfo
+import json
 
 router = APIRouter()
+
+
+def build_schedule_request(user_id: str, plan_date: str) -> ScheduleRequest:
+    """Fetch everything from DB and build a ScheduleRequest. Used by both HTTP endpoint and WebSocket checkin."""
+
+    # 1. Fetch profile
+    profile_response = supabase.table("profiles") \
+        .select("timezone, work_start, work_end") \
+        .eq("id", user_id) \
+        .execute()
+    profile = profile_response.data[0] if profile_response.data else {}
+    tz_name = profile.get("timezone", "UTC")
+    work_start = str(profile.get("work_start", "06:00"))[:5]
+    work_end = str(profile.get("work_end", "23:59"))[:5]
+
+    # 2. Mid-day start logic
+    now = datetime.now(zoneinfo.ZoneInfo(tz_name))
+    today = now.strftime("%Y-%m-%d")
+    current_time = now.strftime("%H:%M")
+    effective_start = current_time if (plan_date == today and current_time > work_start) else work_start
+
+    # 3. Fetch non-completed tasks for today
+    tasks_response = supabase.table("tasks") \
+        .select("id, title, description, estimated_minutes, priority, status") \
+        .eq("user_id", user_id) \
+        .eq("original_date", plan_date) \
+        .neq("status", "completed") \
+        .execute()
+
+    tasks = [
+        TaskInput(
+            id=t["id"],
+            title=t["title"],
+            description=t.get("description"),
+            estimated_minutes=t["estimated_minutes"],
+            priority=t["priority"],
+        )
+        for t in tasks_response.data
+    ]
+
+    # 4. Fetch and filter blocked slots by date
+    slots_response = supabase.table("blocked_slots") \
+        .select("label, start_time, end_time, active_from") \
+        .eq("user_id", user_id) \
+        .eq("active_from", plan_date) \
+        .execute()
+
+    blocked_slots = [
+        BlockedSlotInput(
+            label=s["label"],
+            start_time=str(s["start_time"])[:5],
+            end_time=str(s["end_time"])[:5],
+        )
+        for s in slots_response.data
+    ]
+
+    return ScheduleRequest(
+        plan_date=plan_date,
+        work_start=effective_start,
+        work_end=work_end,
+        timezone=tz_name,
+        tasks=tasks,
+        blocked_slots=blocked_slots,
+    )
+
 
 @router.post("/generate-schedule", response_model=ScheduleResponse)
 async def generate_schedule(
@@ -14,96 +80,15 @@ async def generate_schedule(
     user_id: str = Depends(get_current_user_id)
 ):
     try:
-        # 1. Run the LangChain chain
         schedule = await run_schedule_chain(request)
-
-        # 2. Upsert into daily_plans
-        plan_data = {
-            "user_id": user_id,
-            "plan_date": str(request.plan_date),
-            "status": "draft",
-            "raw_llm_output": schedule.summary,
-            "generation_meta": {
-                "model": "gemini-2.5-flash",
-                "task_count": len(request.tasks),
-                "scheduled_count": len(schedule.scheduled),
-                "skipped_count": len(schedule.skipped),
-                "generated_at": datetime.utcnow().isoformat()
-            }
-        }
-
-        plan_response = supabase.table("daily_plans").upsert(
-            plan_data,
-            on_conflict="user_id,plan_date"
-        ).execute()
-
-        plan_id = plan_response.data[0]["id"]
-
-        # 3. Delete existing schedule_items for this plan (clean slate)
-
-        # First get completed task IDs from tasks table
-        completed = supabase.table("tasks")\
-            .select("id")\
-            .eq("user_id", user_id)\
-            .eq("status", "completed")\
-            .execute()
-
-        completed_ids = [t["id"] for t in completed.data]
-
-        # Delete only non-completed schedule items
-        existing_items = supabase.table("schedule_items")\
-            .select("id, task_id")\
-            .eq("plan_id", plan_id)\
-            .execute()
-
-        items_to_delete = [
-            item["id"] for item in existing_items.data
-            if item["task_id"] not in completed_ids
-        ]
-
-        if items_to_delete:
-            supabase.table("schedule_items")\
-                .delete()\
-                .in_("id", items_to_delete)\
-                .execute()
-
-        # 4. Insert new schedule_items
-        if schedule.scheduled:
-            items = [
-                {
-                    "plan_id": plan_id,
-                    "task_id": item.task_id,
-                    "user_id": user_id,
-                    "scheduled_start": f"{request.plan_date}T{item.start_time}:00",
-                    "scheduled_end": f"{request.plan_date}T{item.end_time}:00",
-                    "ai_reasoning": item.reasoning,
-                    "position": idx + 1
-                }
-                for idx, item in enumerate(schedule.scheduled)
-            ]
-            supabase.table("schedule_items").insert(items).execute()
-
-        # 5. Update task statuses
-        scheduled_ids = [item.task_id for item in schedule.scheduled]
-        skipped_ids = [item.task_id for item in schedule.skipped]
-
-        if scheduled_ids:
-            supabase.table("tasks").update(
-                {"status": "scheduled"}
-            ).in_("id", scheduled_ids).eq("user_id", user_id).execute()
-
-        if skipped_ids:
-            supabase.table("tasks").update(
-                {"status": "skipped"}
-            ).in_("id", skipped_ids).eq("user_id", user_id).execute()
-
+        await save_schedule(schedule, request, user_id)
         return schedule
 
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="AI returned invalid JSON — try again")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-    
+
 
 @router.get("/schedule/{plan_date}")
 async def get_schedule(
@@ -111,12 +96,11 @@ async def get_schedule(
     user_id: str = Depends(get_current_user_id)
 ):
     try:
-        # Get the daily plan
-        plan = supabase.table("daily_plans")\
-            .select("*")\
-            .eq("user_id", user_id)\
-            .eq("plan_date", plan_date)\
-            .single()\
+        plan = supabase.table("daily_plans") \
+            .select("*") \
+            .eq("user_id", user_id) \
+            .eq("plan_date", plan_date) \
+            .single() \
             .execute()
 
         if not plan.data:
@@ -124,21 +108,19 @@ async def get_schedule(
 
         plan_id = plan.data["id"]
 
-        # Get schedule items with task details
-        items = supabase.table("schedule_items")\
-            .select("*, tasks(title, priority, estimated_minutes, status)")\
-            .eq("plan_id", plan_id)\
-            .order("scheduled_start")\
+        items = supabase.table("schedule_items") \
+            .select("*, tasks(title, priority, estimated_minutes, status)") \
+            .eq("plan_id", plan_id) \
+            .order("scheduled_start") \
             .execute()
 
-        # Format into ScheduleResponse shape
         scheduled = []
         for item in items.data:
             task = item["tasks"]
             scheduled.append({
                 "task_id": item["task_id"],
                 "title": task["title"],
-                "start_time": item["scheduled_start"][11:16],  # extract "HH:MM"
+                "start_time": item["scheduled_start"][11:16],
                 "end_time": item["scheduled_end"][11:16],
                 "priority": task["priority"],
                 "reasoning": item.get("ai_reasoning", ""),
@@ -154,7 +136,7 @@ async def get_schedule(
 
     except Exception:
         return None
-    
+
 
 @router.patch("/schedule-item/{task_id}")
 async def update_schedule_item(
@@ -163,12 +145,11 @@ async def update_schedule_item(
     user_id: str = Depends(get_current_user_id)
 ):
     try:
-        # Get plan_id for today's plan
-        plan = supabase.table("daily_plans")\
-            .select("id")\
-            .eq("user_id", user_id)\
-            .eq("plan_date", payload.plan_date)\
-            .single()\
+        plan = supabase.table("daily_plans") \
+            .select("id") \
+            .eq("user_id", user_id) \
+            .eq("plan_date", payload.plan_date) \
+            .single() \
             .execute()
 
         if not plan.data:
@@ -176,15 +157,16 @@ async def update_schedule_item(
 
         plan_id = plan.data["id"]
 
-        supabase.table("schedule_items")\
-                .update({
+        supabase.table("schedule_items") \
+            .update({
                 "scheduled_start": f"{payload.plan_date}T{payload.start_time}:00",
                 "scheduled_end": f"{payload.plan_date}T{payload.end_time}:00",
-                })\
-                .eq("plan_id", plan_id)\
-                .eq("task_id", task_id)\
-                .execute()
+            }) \
+            .eq("plan_id", plan_id) \
+            .eq("task_id", task_id) \
+            .execute()
 
         return {"updated": True}
+
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

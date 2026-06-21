@@ -7,7 +7,6 @@ export interface BlockedSlotFormData {
   label: string;
   start_time: string;
   end_time: string;
-  recurrence?: "none" | "daily" | "weekdays" | "weekly";
   active_from?: string;
 }
 

@@ -25,13 +25,14 @@ export default function DashboardPage() {
   const [schedule, setSchedule] = useState<ScheduleResponse | null>(null);
   const [generateError, setGenerateError] = useState<string | null>(null);
   const [completedTaskIds, setCompletedTaskIds] = useState<Set<string>>(
+  
     new Set(),
   );
   const [isGenerating, setIsGenerating] = useState(false);
   const [date, setDate] = useState(
     () => new Date().toISOString().split("T")[0],
   );
-
+  
   // Load plan + schedule for selected date
   const loadData = useCallback(async (selectedDate: string) => {
     try {
@@ -39,21 +40,22 @@ export default function DashboardPage() {
       const result = await apiGet<{ plan_date: string; tasks: TaskFormData[] }>(
         `/api/tasks/daily-plan?plan_date=${selectedDate}`,
       );
-
+      
       const tasks = result.tasks ?? [];
       setHighTasks(tasks.filter((t) => t.priority === "high"));
       setMediumTasks(tasks.filter((t) => t.priority === "medium"));
       setLowTasks(tasks.filter((t) => t.priority === "low"));
-
+      
       // Load blocked slots
       const slots = await apiGet<BlockedSlotFormData[]>(
         `/api/blocked-slots?date=${selectedDate}`,
       );
       setBlockedSlots(slots ?? []);
-
+      
       // Load existing schedule
       const existing = await getSchedule(selectedDate);
       setSchedule(existing);
+      
 
       // Build completed IDs from both tasks and schedule
       const completedFromTasks = tasks
@@ -154,7 +156,7 @@ export default function DashboardPage() {
       console.error("Failed to update task status:", err);
     }
   };
-
+  const handleDataChange = useCallback(() => { void loadData(date) }, [date, loadData])
   const handleGenerate = async () => {
     const allTasks = [...highTasks, ...mediumTasks, ...lowTasks]
       .filter((t) => t.title.trim() !== "" && (t as any).id)
@@ -280,7 +282,8 @@ export default function DashboardPage() {
 
       {/* Chat */}
       <div className="w-72 shrink-0 bg-white flex flex-col h-full">
-        <ChatPanel />
+        
+        <ChatPanel onDataChange={handleDataChange} />
       </div>
     </div>
   );

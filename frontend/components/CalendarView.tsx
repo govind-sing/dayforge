@@ -109,7 +109,6 @@ export default function CalendarView({
       label,
       start_time: modal.start,
       end_time: modal.end,
-      recurrence: "none",
       active_from: date,
     });
     setModal(null);

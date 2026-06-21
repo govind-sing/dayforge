@@ -2,7 +2,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
-from app.routers import schedule
+from app.routers import schedule, checkin
 
 app = FastAPI(title="DayForge AI Service")
 
@@ -23,6 +23,7 @@ async def global_exception_handler(request: Request, exc: Exception):
     return response
 
 app.include_router(schedule.router, prefix="/api/ai")
+app.include_router(checkin.router, prefix="/api/ai")
 
 @app.get("/health")
 async def health():
