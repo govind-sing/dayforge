@@ -1,137 +1,172 @@
-"use client"
+"use client";
 
-import { useEffect, useRef, useState } from "react"
-import { createClient } from "@/lib/supabase"
+import { useEffect, useRef, useState } from "react";
+import { createClient } from "@/lib/supabase";
 
 type Message = {
-  role: "user" | "assistant"
-  content: string
-}
+  role: "user" | "assistant";
+  content: string;
+};
 
-
-
-const MUTATING_ACTIONS = ["add_task", "add_to_schedule", "generate_schedule", "mark_complete", "reschedule", "skip"]
+const MUTATING_ACTIONS = [
+  "add_task",
+  "add_tasks",
+  "add_to_schedule",
+  "generate_schedule",
+  "mark_complete",
+  "reschedule",
+  "skip",
+  "delete_task",
+  "move_tasks_to_today",
+];
 
 interface Props {
-  onDataChange: () => void
+  onDataChange: () => void;
 }
 
 export default function ChatPanel({ onDataChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([
-    { role: "assistant", content: "Hey! I'm Jarvis. Generate a schedule and I'll help you stay on track." }
-  ])
-  const [input, setInput] = useState("")
-  const [connected, setConnected] = useState(false)
-  const [typing, setTyping] = useState(false)
+    {
+      role: "assistant",
+      content:
+        "Hey! I'm Jarvis. Generate a schedule and I'll help you stay on track.",
+    },
+  ]);
+  const [input, setInput] = useState("");
+  const [connected, setConnected] = useState(false);
+  const [typing, setTyping] = useState(false);
 
-  const wsRef = useRef<WebSocket | null>(null)
-  const pingRef = useRef<NodeJS.Timeout | null>(null)
-  const bottomRef = useRef<HTMLDivElement | null>(null)
+  const wsRef = useRef<WebSocket | null>(null);
+  const pingRef = useRef<NodeJS.Timeout | null>(null);
+  const bottomRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
-    let ws: WebSocket
+    let ws: WebSocket;
 
     const connect = async () => {
-      const supabase = createClient()
-      const { data: { session } } = await supabase.auth.getSession()
-      if (!session) return
+      const supabase = createClient();
+      const {
+        data: { session },
+      } = await supabase.auth.getSession();
+      if (!session) return;
 
-      const token = session.access_token
-      const today = new Date().toISOString().split("T")[0]
-      const url = `${process.env.NEXT_PUBLIC_AI_URL!.replace("https", "wss").replace("http", "ws")}/api/ai/ws/checkin?token=${token}&plan_date=${today}`
+      const token = session.access_token;
+      const today = new Date().toISOString().split("T")[0];
+      const url = `${process.env.NEXT_PUBLIC_AI_URL!.replace("https", "wss").replace("http", "ws")}/api/ai/ws/checkin?token=${token}&plan_date=${today}`;
 
-      ws = new WebSocket(url)
-      wsRef.current = ws
+      ws = new WebSocket(url);
+      wsRef.current = ws;
 
       ws.onopen = () => {
-        setConnected(true)
+        setConnected(true);
         pingRef.current = setInterval(() => {
           if (ws.readyState === WebSocket.OPEN) {
-            ws.send(JSON.stringify({ type: "ping" }))
+            ws.send(JSON.stringify({ type: "ping" }));
           }
-        }, 30000)
-      }
+        }, 30000);
+      };
 
       ws.onmessage = (e) => {
-        const data = JSON.parse(e.data)
+        const data = JSON.parse(e.data);
 
-        if (data.type === "connected") return
+        if (data.type === "connected") return;
 
         if (data.type === "stream_chunk") {
-          setTyping(false)
-          setMessages(prev => {
-            const last = prev[prev.length - 1]
+          setTyping(false);
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
             if (last?.role === "assistant" && last.content === "...") {
-              return [...prev.slice(0, -1), { role: "assistant", content: data.content }]
+              return [
+                ...prev.slice(0, -1),
+                { role: "assistant", content: data.content },
+              ];
             }
-            return [...prev, { role: "assistant", content: data.content }]
-          })
+            return [...prev, { role: "assistant", content: data.content }];
+          });
         }
 
         if (data.type === "stream_end") {
-          if (data.action && MUTATING_ACTIONS.includes(data.action)) {
-            onDataChange()
+          const actions: string[] = data.actions ?? [];
+          if (actions.some((a: string) => MUTATING_ACTIONS.includes(a))) {
+            onDataChange();
           }
         }
 
         if (data.type === "error") {
-          setTyping(false)
-          setMessages(prev => [...prev, { role: "assistant", content: "Something went wrong. Try again." }])
+          setTyping(false);
+          setMessages((prev) => [
+            ...prev,
+            { role: "assistant", content: "Something went wrong. Try again." },
+          ]);
         }
-      }
+      };
 
       ws.onclose = () => {
-        setConnected(false)
-        if (pingRef.current) clearInterval(pingRef.current)
-      }
+        setConnected(false);
+        if (pingRef.current) clearInterval(pingRef.current);
+      };
 
       ws.onerror = () => {
-        setConnected(false)
-      }
-    }
+        setConnected(false);
+      };
+    };
 
-    connect()
+    connect();
 
     return () => {
-      if (pingRef.current) clearInterval(pingRef.current)
-      wsRef.current?.close()
-    }
-  }, [onDataChange])
+      if (pingRef.current) clearInterval(pingRef.current);
+      wsRef.current?.close();
+    };
+  }, [onDataChange]);
 
   useEffect(() => {
-    bottomRef.current?.scrollIntoView({ behavior: "smooth" })
-  }, [messages, typing])
+    bottomRef.current?.scrollIntoView({ behavior: "smooth" });
+  }, [messages, typing]);
 
   const sendMessage = (content: string) => {
-    if (!content.trim() || !wsRef.current || wsRef.current.readyState !== WebSocket.OPEN) return
-    setMessages(prev => [...prev, { role: "user", content }])
-    setTyping(true)
-    wsRef.current.send(JSON.stringify({ type: "user_message", content }))
-    setInput("")
-  }
+    if (
+      !content.trim() ||
+      !wsRef.current ||
+      wsRef.current.readyState !== WebSocket.OPEN
+    )
+      return;
+    setMessages((prev) => [...prev, { role: "user", content }]);
+    setTyping(true);
+    wsRef.current.send(JSON.stringify({ type: "user_message", content }));
+    setInput("");
+  };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") sendMessage(input)
-  }
+    if (e.key === "Enter") sendMessage(input);
+  };
 
   return (
     <div className="flex flex-col h-full bg-gray-950 text-white">
       {/* Header */}
       <div className="flex items-center gap-2 px-4 py-3 border-b border-gray-800">
-        <div className={`w-2 h-2 rounded-full ${connected ? "bg-green-400" : "bg-gray-600"}`} />
+        <div
+          className={`w-2 h-2 rounded-full ${connected ? "bg-green-400" : "bg-gray-600"}`}
+        />
         <span className="text-sm font-medium text-gray-300">Jarvis</span>
-        {!connected && <span className="text-xs text-gray-500 ml-auto">Connecting...</span>}
+        {!connected && (
+          <span className="text-xs text-gray-500 ml-auto">Connecting...</span>
+        )}
       </div>
 
       {/* Messages */}
       <div className="flex-1 overflow-y-auto px-4 py-4 space-y-3">
         {messages.map((msg, i) => (
-          <div key={i} className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}>
-            <div className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-line ${
-              msg.role === "user"
-                ? "bg-blue-600 text-white rounded-br-sm"
-                : "bg-gray-800 text-gray-100 rounded-bl-sm"
-            }`}>
+          <div
+            key={i}
+            className={`flex ${msg.role === "user" ? "justify-end" : "justify-start"}`}
+          >
+            <div
+              className={`max-w-[80%] px-3 py-2 rounded-2xl text-sm leading-relaxed whitespace-pre-line ${
+                msg.role === "user"
+                  ? "bg-blue-600 text-white rounded-br-sm"
+                  : "bg-gray-800 text-gray-100 rounded-bl-sm"
+              }`}
+            >
               {msg.content}
             </div>
           </div>
@@ -157,7 +192,7 @@ export default function ChatPanel({ onDataChange }: Props) {
         <input
           type="text"
           value={input}
-          onChange={e => setInput(e.target.value)}
+          onChange={(e) => setInput(e.target.value)}
           onKeyDown={handleKeyDown}
           placeholder={connected ? "Message Jarvis..." : "Connecting..."}
           disabled={!connected}
@@ -172,5 +207,5 @@ export default function ChatPanel({ onDataChange }: Props) {
         </button>
       </div>
     </div>
-  )
+  );
 }
