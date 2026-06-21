@@ -3,7 +3,6 @@ from app.core.supabase_client import supabase
 from app.core.auth import get_current_user_id
 from app.models.schemas import BlockedSlotInput, BlockedSlotUpdate
 from uuid import UUID
-from datetime import date as DateType
 from typing import Optional
 
 router = APIRouter(prefix="/api/blocked-slots", tags=["blocked-slots"])

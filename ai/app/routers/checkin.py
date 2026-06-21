@@ -3,7 +3,7 @@ from app.core.supabase_client import supabase
 from app.chains.checkin_chain import run_checkin_chain
 from app.chains.schedule_chain import run_schedule_chain, save_schedule
 from gotrue.errors import AuthApiError
-from datetime import datetime, timedelta
+from datetime import datetime
 from app.routers.schedule import build_schedule_request
 
 import zoneinfo

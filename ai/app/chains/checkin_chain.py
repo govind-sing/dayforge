@@ -132,7 +132,6 @@ def save_messages(session_id: str, user_id: str, user_content: str, ai_content: 
 def get_pending_tasks(user_id: str, plan_date: str, tz_name: str) -> str:
     """Fetch pending/skipped tasks and tasks whose scheduled time has passed but aren't complete."""
     now = datetime.now(zoneinfo.ZoneInfo(tz_name))
-    current_time = now.strftime("%H:%M")
 
     # Get all non-completed tasks for today
     result = supabase.table("tasks") \

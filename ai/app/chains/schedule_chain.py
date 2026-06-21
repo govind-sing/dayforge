@@ -33,8 +33,7 @@ def format_blocked_slots(slots) -> str:
     )
 
 async def run_schedule_chain(request: ScheduleRequest) -> ScheduleResponse:
-    tasks_str = format_tasks(request.tasks)
-    blocked_str = format_blocked_slots(request.blocked_slots)
+    
 
     # print("=== SCHEDULE PROMPT ===")
     # print(f"Date: {request.plan_date}")
