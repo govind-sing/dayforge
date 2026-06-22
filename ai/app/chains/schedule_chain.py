@@ -35,13 +35,14 @@ def format_blocked_slots(slots) -> str:
 async def run_schedule_chain(request: ScheduleRequest) -> ScheduleResponse:
     
 
-    # print("=== SCHEDULE PROMPT ===")
-    # print(f"Date: {request.plan_date}")
-    # print(f"Work: {request.work_start} - {request.work_end}")
-    # print(f"Timezone: {request.timezone}")
+    print("=== SCHEDULE PROMPT ===")
+    print(f"Date: {request.plan_date}")
+    print(f"Work: {request.work_start} - {request.work_end}")
+    print(f"Timezone: {request.timezone}")
     # print(f"Tasks:\n{tasks_str}")
     # print(f"Blocked:\n{blocked_str}")
-    # print("=======================")
+    print(f"Past Patterns:\n{request.past_patterns}")
+    print("=======================")
     raw_output = await schedule_chain.ainvoke({
         "plan_date": str(request.plan_date),
         "work_start": request.work_start,
@@ -49,6 +50,7 @@ async def run_schedule_chain(request: ScheduleRequest) -> ScheduleResponse:
         "timezone": request.timezone,
         "tasks": format_tasks(request.tasks),
         "blocked_slots": format_blocked_slots(request.blocked_slots),
+        "past_patterns": request.past_patterns,  # RAG context
     })
 
     cleaned = raw_output.strip()

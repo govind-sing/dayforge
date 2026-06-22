@@ -54,6 +54,8 @@ SCHEDULE_HUMAN_PROMPT = """Please generate a schedule for {plan_date}.
 WORKING HOURS: {work_start} to {work_end}
 TIMEZONE: {timezone}
 
+{past_patterns}
+
 TASKS:
 {tasks}
 

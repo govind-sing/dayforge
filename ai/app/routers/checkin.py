@@ -5,6 +5,9 @@ from app.chains.schedule_chain import run_schedule_chain, save_schedule
 from gotrue.errors import AuthApiError
 from datetime import datetime, timedelta
 from app.routers.schedule import build_schedule_request
+from app.task_event_logger.task_event_logger import (
+    log_completed, log_skipped, log_rescheduled, log_deleted
+)
 
 import zoneinfo
 
@@ -133,22 +136,66 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
     elif action == "delete_task":
         task_id = params.get("task_id")
         if task_id:
+            # 1. Fetch details first
+            try:
+                task_result = supabase.table("tasks") \
+                    .select("title, priority") \
+                    .eq("id", task_id) \
+                    .eq("user_id", user_id) \
+                    .maybe_single() \
+                    .execute()
+                task_data = task_result.data
+            except Exception:
+                task_data = None
+
+            # 2. Log before deleting — if delete fails, log still exists as a trace
+            if task_data:
+                await log_deleted(
+                    supabase=supabase,
+                    user_id=user_id,
+                    task_id=task_id,
+                    task_title=task_data["title"],
+                    priority=task_data["priority"],
+                )
+
+            # 3. Delete — if this raises, it bubbles up and user sees the error
             supabase.table("tasks").delete() \
                 .eq("id", task_id) \
                 .eq("user_id", user_id) \
                 .execute()
-        return None
-    
 
+        return None
     elif action == "move_tasks_to_today":
         task_ids = params.get("task_ids", [])
         if task_ids:
+            # 1. Fetch task details before updating (for logging)
+            tasks_result = supabase.table("tasks") \
+                .select("id, title, priority, original_date") \
+                .in_("id", task_ids) \
+                .eq("user_id", user_id) \
+                .execute()
+
+            # 2. Update dates
             supabase.table("tasks").update({
                 "original_date": plan_date,
                 "status": "pending",
             }).in_("id", task_ids) \
             .eq("user_id", user_id) \
             .execute()
+
+            # 3. Log a reschedule event per task
+            for t in tasks_result.data:
+                await log_rescheduled(
+                    supabase=supabase,
+                    user_id=user_id,
+                    task_id=t["id"],
+                    task_title=t["title"],
+                    priority=t["priority"],
+                    prev_date=t["original_date"],
+                    new_date=plan_date,
+                    prev_scheduled_start=None,
+                    new_scheduled_start=None,
+                )
         return None
     
 
@@ -255,35 +302,140 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
     elif action == "mark_complete":
         task_id = params.get("task_id")
         if task_id:
+            # 1. Fetch task details before updating
+            task_result = supabase.table("tasks") \
+                .select("title, priority, original_date") \
+                .eq("id", task_id) \
+                .eq("user_id", user_id) \
+                .maybe_single() \
+                .execute()
+
+            # 2. Fetch scheduled time from schedule_items
+            item_result = supabase.table("schedule_items") \
+                .select("scheduled_start") \
+                .eq("task_id", task_id) \
+                .order("scheduled_start", desc=True) \
+                .limit(1) \
+                .execute()
+
+            # 3. Update status
             supabase.table("tasks").update({"status": "completed"}) \
                 .eq("id", task_id) \
                 .eq("user_id", user_id) \
                 .execute()
+
+            # 4. Log event
+            if task_result.data:
+                t = task_result.data
+                scheduled_start = None
+                if item_result.data:
+                    scheduled_start = item_result.data[0]["scheduled_start"][11:16]
+
+                await log_completed(
+                    supabase=supabase,
+                    user_id=user_id,
+                    task_id=task_id,
+                    task_title=t["title"],
+                    priority=t["priority"],
+                    scheduled_date=t["original_date"],
+                    scheduled_start=scheduled_start,
+                )
         return None
 
+    
     elif action == "skip":
         task_id = params.get("task_id")
         if task_id:
+            # 1. Fetch task details
+            try:
+                task_result = supabase.table("tasks") \
+                    .select("title, priority, original_date") \
+                    .eq("id", task_id) \
+                    .eq("user_id", user_id) \
+                    .maybe_single() \
+                    .execute()
+                task_data = task_result.data
+            except Exception:
+                task_data = None
+
+            # 2. Fetch scheduled time before removing
+            item_result = supabase.table("schedule_items") \
+                .select("id, scheduled_start") \
+                .eq("task_id", task_id) \
+                .order("scheduled_start", desc=True) \
+                .limit(1) \
+                .execute()
+
+            # 3. Update task status
             supabase.table("tasks").update({"status": "skipped"}) \
                 .eq("id", task_id) \
                 .eq("user_id", user_id) \
                 .execute()
+
+            # 4. Remove from schedule so it disappears from calendar
+            if item_result.data:
+                supabase.table("schedule_items").delete() \
+                    .eq("id", item_result.data[0]["id"]) \
+                    .execute()
+
+            # 5. Log event
+            if task_data:
+                scheduled_start = None
+                if item_result.data:
+                    scheduled_start = item_result.data[0]["scheduled_start"][11:16]
+
+                await log_skipped(
+                    supabase=supabase,
+                    user_id=user_id,
+                    task_id=task_id,
+                    task_title=task_data["title"],
+                    priority=task_data["priority"],
+                    scheduled_date=task_data["original_date"],
+                    scheduled_start=scheduled_start,
+                )
         return None
 
+    
     elif action == "reschedule":
         schedule_item_id = params.get("schedule_item_id")
         new_start = params.get("new_start")
         new_end = params.get("new_end")
         if schedule_item_id and new_start and new_end:
+            # 1. Fetch current state before updating
+            current = supabase.table("schedule_items") \
+                .select("scheduled_start, scheduled_end, task_id, tasks(title, priority, original_date)") \
+                .eq("id", schedule_item_id) \
+                .eq("user_id", user_id) \
+                .maybe_single() \
+                .execute()
+
+            # 2. Update schedule item
             supabase.table("schedule_items").update({
                 "scheduled_start": f"{plan_date}T{new_start}:00",
                 "scheduled_end": f"{plan_date}T{new_end}:00",
             }).eq("id", schedule_item_id) \
-              .eq("user_id", user_id) \
-              .execute()
-        return None
+            .eq("user_id", user_id) \
+            .execute()
 
-    return None
+            # 3. Log reschedule event
+            if current.data:
+                c = current.data
+                task = c["tasks"]
+                prev_start = c["scheduled_start"][11:16]
+                prev_date = c["scheduled_start"][:10]
+
+                await log_rescheduled(
+                    supabase=supabase,
+                    user_id=user_id,
+                    task_id=c["task_id"],
+                    task_title=task["title"],
+                    priority=task["priority"],
+                    prev_date=prev_date,
+                    new_date=plan_date,
+                    prev_scheduled_start=prev_start,
+                    new_scheduled_start=new_start,
+                )
+        return None
 
 
 

@@ -16,11 +16,12 @@ class BlockedSlotInput(BaseModel):
 
 class ScheduleRequest(BaseModel):
     plan_date: date
-    work_start: str   # "HH:MM"
-    work_end: str     # "HH:MM"
+    work_start: str
+    work_end: str
     timezone: str
     tasks: list[TaskInput]
     blocked_slots: list[BlockedSlotInput]
+    past_patterns: str = ""  # RAG context, empty if no history yet
 
 class ScheduledItem(BaseModel):
     task_id: str

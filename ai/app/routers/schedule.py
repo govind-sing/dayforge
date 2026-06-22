@@ -6,7 +6,7 @@ from app.chains.schedule_chain import run_schedule_chain, save_schedule
 from datetime import datetime
 import zoneinfo
 import json
-
+from app.rag.retriever import get_past_patterns
 router = APIRouter()
 
 
@@ -47,7 +47,7 @@ def build_schedule_request(user_id: str, plan_date: str) -> ScheduleRequest:
         )
         for t in tasks_response.data
     ]
-
+    
     # 4. Fetch and filter blocked slots by date
     slots_response = supabase.table("blocked_slots") \
         .select("label, start_time, end_time, active_from") \
@@ -63,6 +63,9 @@ def build_schedule_request(user_id: str, plan_date: str) -> ScheduleRequest:
         )
         for s in slots_response.data
     ]
+    # 5. Fetch past patterns from ChromaDB
+    task_titles = [t.title for t in tasks]
+    past_patterns = get_past_patterns(user_id=user_id, task_titles=task_titles)
 
     return ScheduleRequest(
         plan_date=plan_date,
@@ -71,7 +74,9 @@ def build_schedule_request(user_id: str, plan_date: str) -> ScheduleRequest:
         timezone=tz_name,
         tasks=tasks,
         blocked_slots=blocked_slots,
-    )
+        past_patterns=past_patterns,  # new
+    
+    )   
 
 
 @router.post("/generate-schedule", response_model=ScheduleResponse)
@@ -157,6 +162,15 @@ async def update_schedule_item(
 
         plan_id = plan.data["id"]
 
+        # 1. Fetch current time before updating
+        current_item = supabase.table("schedule_items") \
+            .select("scheduled_start") \
+            .eq("plan_id", plan_id) \
+            .eq("task_id", task_id) \
+            .maybe_single() \
+            .execute()
+
+        # 2. Update schedule item
         supabase.table("schedule_items") \
             .update({
                 "scheduled_start": f"{payload.plan_date}T{payload.start_time}:00",
@@ -165,6 +179,30 @@ async def update_schedule_item(
             .eq("plan_id", plan_id) \
             .eq("task_id", task_id) \
             .execute()
+
+        # 3. Fetch task details for logging
+        task = supabase.table("tasks") \
+            .select("title, priority") \
+            .eq("id", task_id) \
+            .eq("user_id", user_id) \
+            .maybe_single() \
+            .execute()
+
+        # 4. Log same-day time change as reschedule
+        if current_item.data and task.data:
+            prev_start = current_item.data["scheduled_start"][11:16]
+            supabase.table("task_events").insert({
+                "user_id": user_id,
+                "task_id": task_id,
+                "task_title": task.data["title"],
+                "priority": task.data["priority"],
+                "event_type": "rescheduled",
+                "prev_date": payload.plan_date,
+                "new_date": payload.plan_date,
+                "prev_scheduled_start": prev_start,
+                "new_scheduled_start": payload.start_time,
+                "carried_forward": False,
+            }).execute()
 
         return {"updated": True}
 
