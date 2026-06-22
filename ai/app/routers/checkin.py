@@ -26,7 +26,7 @@ def get_user_profile(user_id: str) -> dict:
     return {"timezone": "Asia/Kolkata", "work_start": "07:00", "work_end": "22:00"}
 
 
-def convert_utc_to_local(utc_timestamp: str) -> str:
+def convert_utc_to_local(utc_timestamp: str, tz_name: str) -> str:
     return utc_timestamp[11:16]
 
 
@@ -286,6 +286,7 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
     return None
 
 
+
 @router.websocket("/ws/checkin")
 async def checkin_websocket(
     websocket: WebSocket,
@@ -388,3 +389,6 @@ async def checkin_websocket(
                     })
     except WebSocketDisconnect:
         print(f"Client disconnected: {user_id}")
+
+
+

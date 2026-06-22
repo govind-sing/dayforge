@@ -24,6 +24,7 @@ interface Props {
   onDataChange: () => void;
 }
 
+
 export default function ChatPanel({ onDataChange }: Props) {
   const [messages, setMessages] = useState<Message[]>([
     {
@@ -39,6 +40,11 @@ export default function ChatPanel({ onDataChange }: Props) {
   const wsRef = useRef<WebSocket | null>(null);
   const pingRef = useRef<NodeJS.Timeout | null>(null);
   const bottomRef = useRef<HTMLDivElement | null>(null);
+  const onDataChangeRef = useRef(onDataChange)
+  useEffect(() => {
+  onDataChangeRef.current = onDataChange
+}, [onDataChange])
+
 
   useEffect(() => {
     let ws: WebSocket;
@@ -88,8 +94,8 @@ export default function ChatPanel({ onDataChange }: Props) {
         if (data.type === "stream_end") {
           const actions: string[] = data.actions ?? [];
           if (actions.some((a: string) => MUTATING_ACTIONS.includes(a))) {
-            onDataChange();
-          }
+          onDataChangeRef.current()  // use ref, not the prop directly
+        }
         }
 
         if (data.type === "error") {
@@ -117,7 +123,7 @@ export default function ChatPanel({ onDataChange }: Props) {
       if (pingRef.current) clearInterval(pingRef.current);
       wsRef.current?.close();
     };
-  }, [onDataChange]);
+  }, []);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });

@@ -150,7 +150,6 @@ Format:
     }}
   ],
   "message": "<single friendly summary of everything you're doing>"
-}}
 }}"""),
     MessagesPlaceholder(variable_name="history"),
     ("human", "{input}"),
@@ -259,15 +258,20 @@ def get_free_slots(schedule_context: str, plan_date: str, tz_name: str, work_end
 
 def get_tasks_by_date(user_id: str, date: str, status_filter: str, today: str, tz_name: str) -> str:
     resolved = resolve_date(date, today, tz_name)
-    print(f"=== get_tasks_by_date: input={date}, today={today}, resolved={resolved} ===")
 
     query = supabase.table("tasks") \
         .select("id, title, priority, estimated_minutes, status") \
         .eq("user_id", user_id) \
         .eq("original_date", resolved)
 
-    if status_filter and status_filter != "all":
-        query = query.eq("status", status_filter)
+    # "pending" means not completed — includes both pending and scheduled
+    if status_filter == "completed":
+        query = query.eq("status", "completed")
+    elif status_filter == "skipped":
+        query = query.eq("status", "skipped")
+    elif status_filter in ("pending", "incomplete"):
+        query = query.in_("status", ["pending", "scheduled"])
+    # "all" or anything else — no filter
 
     result = query.execute()
 
@@ -287,9 +291,18 @@ def get_tasks_by_date(user_id: str, date: str, status_filter: str, today: str, t
 
     return f"Tasks for {resolved}:\n" + "\n".join(lines)
 
-
 def get_history_by_date(user_id: str, date: str, from_time: str | None, to_time: str | None, today: str, tz_name: str) -> str:
     resolved = resolve_date(date, today, tz_name)
+
+    def overlaps(start: str, end: str) -> bool:
+        """Check if a task overlaps the requested time window."""
+        if from_time and to_time:
+            return start < to_time and end > from_time
+        elif from_time:
+            return end > from_time
+        elif to_time:
+            return start < to_time
+        return True
 
     # Fetch schedule items
     plan = supabase.table("daily_plans") \
@@ -310,9 +323,7 @@ def get_history_by_date(user_id: str, date: str, from_time: str | None, to_time:
         for item in items.data:
             start = item["scheduled_start"][11:16]
             end = item["scheduled_end"][11:16]
-            if from_time and start < from_time:
-                continue
-            if to_time and end > to_time:
+            if not overlaps(start, end):
                 continue
             title = item["tasks"]["title"]
             status = item["tasks"]["status"]
@@ -329,9 +340,7 @@ def get_history_by_date(user_id: str, date: str, from_time: str | None, to_time:
     for s in slots.data:
         start = str(s["start_time"])[:5]
         end = str(s["end_time"])[:5]
-        if from_time and start < from_time:
-            continue
-        if to_time and end > to_time:
+        if not overlaps(start, end):
             continue
         slot_lines.append(f"- {start}–{end}: {s['label']} (blocked)")
 
@@ -345,7 +354,6 @@ def get_history_by_date(user_id: str, date: str, from_time: str | None, to_time:
     if slot_lines:
         result += "\nBlocked slots:\n" + "\n".join(slot_lines)
     return result
-
 async def run_checkin_chain(
     session_id: str,
     user_id: str,
