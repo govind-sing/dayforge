@@ -43,7 +43,7 @@ def get_personality_insights(user_id: str, tz_name: str) -> str:
     low_med_rate = round(len(low_med_done) / len(low_med_total) * 100) if low_med_total else None
 
     # --- Free time quality ---
-    free_slot_logs = [l["content"] for l in log_rows if l["log_type"] == "free_slot"]
+    free_slot_logs = [log["content"] for log in log_rows if log["log_type"] == "free_slot"]
 
     # --- Consistency ---
     completed_dates = set(r["scheduled_date"] for r in rows if r["event_type"] == "completed")
