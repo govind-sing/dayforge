@@ -9,7 +9,7 @@ from app.task_event_logger.task_event_logger import (
     log_completed, log_skipped, log_rescheduled, log_deleted
 )
 from app.rag.retriever import get_aligned_goals
-
+from app.rag.personality import get_personality_insights
 import zoneinfo
 
 router = APIRouter()
@@ -86,6 +86,7 @@ def get_schedule_context(user_id: str, plan_date: str, tz_name: str) -> str:
         context += f"\n\n{aligned_goals}"
 
     return context
+
 
 
 def get_or_create_session(user_id: str, plan_date: str) -> str:
@@ -184,6 +185,30 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
                 .execute()
 
         return None
+    
+    elif action == "log_unstructured":
+            content = params.get("content")
+            log_type = params.get("log_type")
+            if content and log_type:
+                supabase.table("unstructured_logs").insert({
+                    "user_id": user_id,
+                    "date": plan_date,
+                    "content": content,
+                    "log_type": log_type,
+                }).execute()
+            return None
+
+    elif action == "save_eod_summary":
+        summary = params.get("summary")
+        if summary:
+            supabase.table("eod_summaries").upsert({
+                "user_id": user_id,
+                "date": plan_date,
+                "summary": summary,
+            }).execute()
+        return None
+
+
     elif action == "move_tasks_to_today":
         task_ids = params.get("task_ids", [])
         if task_ids:
@@ -528,6 +553,7 @@ async def checkin_websocket(
     profile = get_user_profile(user_id)
     tz_name = profile["timezone"]
     schedule_context = get_schedule_context(user_id, plan_date, tz_name)
+    personality_context = get_personality_insights(user_id, tz_name) 
     session_id = get_or_create_session(user_id, plan_date)
 
     try:
@@ -549,6 +575,7 @@ async def checkin_websocket(
                         user_id=user_id,
                         user_message=user_content,
                         schedule_context=schedule_context,
+                        personality_context=personality_context,
                         tz_name=tz_name,
                         plan_date=plan_date,
                         work_end=profile["work_end"],
@@ -580,7 +607,8 @@ async def checkin_websocket(
                     # Refresh context after any mutations
                     if any(a.get("action") not in (
                         "general_reply", "get_tasks", "get_all_tasks", "get_free_slots",
-                        "get_tasks_by_date", "get_history_by_date", "get_all_goals", "get_goal_progress"
+                        "get_tasks_by_date", "get_history_by_date", "get_all_goals", "get_goal_progress",
+                        "log_unstructured", "save_eod_summary" 
                     ) for a in actions):
                         schedule_context = get_schedule_context(user_id, plan_date, tz_name)
 
