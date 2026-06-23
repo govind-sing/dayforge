@@ -8,6 +8,7 @@ from app.routers.schedule import build_schedule_request
 from app.task_event_logger.task_event_logger import (
     log_completed, log_skipped, log_rescheduled, log_deleted
 )
+from app.rag.retriever import get_past_patterns, get_aligned_goals
 
 import zoneinfo
 
@@ -31,6 +32,8 @@ def get_user_profile(user_id: str) -> dict:
 
 def convert_utc_to_local(utc_timestamp: str, tz_name: str) -> str:
     return utc_timestamp[11:16]
+
+
 
 
 def get_schedule_context(user_id: str, plan_date: str, tz_name: str) -> str:
@@ -66,7 +69,23 @@ def get_schedule_context(user_id: str, plan_date: str, tz_name: str) -> str:
             f"[task_id: {item['task_id']}, schedule_item_id: {item['id']}]"
         )
 
-    return "\n".join(lines)
+    schedule_str = "\n".join(lines)
+
+    # Fetch all task titles for goal alignment
+    all_tasks = supabase.table("tasks") \
+        .select("title") \
+        .eq("user_id", user_id) \
+        .eq("original_date", plan_date) \
+        .execute()
+
+    task_titles = [t["title"] for t in all_tasks.data] if all_tasks.data else []
+    aligned_goals = get_aligned_goals(user_id=user_id, task_titles=task_titles)
+
+    context = schedule_str
+    if aligned_goals:
+        context += f"\n\n{aligned_goals}"
+
+    return context
 
 
 def get_or_create_session(user_id: str, plan_date: str) -> str:
@@ -436,6 +455,52 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
                     new_scheduled_start=new_start,
                 )
         return None
+    
+
+
+    elif action == "add_goal":
+        title = params.get("title")
+        description = params.get("description")
+        deadline = params.get("deadline")  # "YYYY-MM-DD" or None
+
+        result = supabase.table("goals").insert({
+            "user_id": user_id,
+            "title": title,
+            "description": description,
+            "deadline": deadline,
+        }).execute()
+
+        goal_id = result.data[0]["id"]
+
+        # Embed into ChromaDB immediately
+        from app.rag.embedder import embed_goal
+        embed_goal(user_id=user_id, goal_id=goal_id, title=title, description=description)
+
+        return None
+
+    elif action == "delete_goal":
+        goal_id = params.get("goal_id")
+        if goal_id:
+            supabase.table("goals").delete() \
+                .eq("id", goal_id) \
+                .eq("user_id", user_id) \
+                .execute()
+
+            # Remove vector from ChromaDB
+            from app.rag.embedder import delete_goal_embedding
+            delete_goal_embedding(user_id=user_id, goal_id=goal_id)
+
+        return None
+
+    elif action == "extend_deadline":
+        goal_id = params.get("goal_id")
+        new_deadline = params.get("new_deadline")  # "YYYY-MM-DD"
+        if goal_id and new_deadline:
+            supabase.table("goals").update({"deadline": new_deadline}) \
+                .eq("id", goal_id) \
+                .eq("user_id", user_id) \
+                .execute()
+        return None
 
 
 
@@ -513,7 +578,10 @@ async def checkin_websocket(
                                 extra_messages.append(extra)
 
                     # Refresh context after any mutations
-                    if any(a.get("action") not in ("general_reply", "get_tasks", "get_all_tasks", "get_free_slots", "get_tasks_by_date", "get_history_by_date") for a in actions):
+                    if any(a.get("action") not in (
+                        "general_reply", "get_tasks", "get_all_tasks", "get_free_slots",
+                        "get_tasks_by_date", "get_history_by_date", "get_all_goals", "get_goal_progress"
+                    ) for a in actions):
                         schedule_context = get_schedule_context(user_id, plan_date, tz_name)
 
                     final_message = result["message"]

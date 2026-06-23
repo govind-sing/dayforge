@@ -2,7 +2,7 @@
 
 import { useState } from 'react'
 import { TaskFormData } from './TaskRow'
-import LogoutButton from './LogoutButton'
+import { useRouter } from 'next/navigation'
 
 interface Props {
   date: string
@@ -302,6 +302,7 @@ export default function Sidebar({
 }: Props) {
   const allTasks = [...highTasks, ...mediumTasks, ...lowTasks].filter(t => t.title.trim() !== '')
   const completedCount = allTasks.filter(t => t.status === 'completed').length
+  const router = useRouter()
 
   return (
     <div className="flex flex-col h-full">
@@ -311,7 +312,29 @@ export default function Sidebar({
           <h1 className="font-bold text-gray-900">DayForge</h1>
           <p className="text-xs text-gray-400">{completedCount}/{allTasks.length} done today</p>
         </div>
-        <LogoutButton />
+        <div className="flex items-center gap-1">
+          <button
+            onClick={() => router.push('/help')}
+            title="Help"
+            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-gray-50 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <circle cx="12" cy="12" r="10" />
+              <path strokeLinecap="round" d="M9.09 9a3 3 0 015.83 1c0 2-3 3-3 3" />
+              <line x1="12" y1="17" x2="12.01" y2="17" strokeLinecap="round" strokeWidth={2.5} />
+            </svg>
+          </button>
+          <button
+            onClick={() => router.push('/profile')}
+            title="Profile"
+            className="p-1.5 text-gray-400 hover:text-violet-600 hover:bg-gray-50 rounded-lg transition-colors"
+          >
+            <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <circle cx="12" cy="8" r="4" />
+              <path strokeLinecap="round" d="M4 20c0-4 3.6-7 8-7s8 3 8 7" />
+            </svg>
+          </button>
+        </div>
       </div>
 
       {/* Task list */}

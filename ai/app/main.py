@@ -6,7 +6,7 @@ from app.core.config import settings
 from app.routers import schedule, checkin
 from app.routers import debug as debug_router
 from app.core.supabase_client import supabase
-from app.rag.embedder import embed_task_outcome
+from app.rag.embedder import embed_task_outcome, embed_goal
 
 
 def rebuild_chroma_from_supabase():
@@ -49,10 +49,40 @@ def rebuild_chroma_from_supabase():
     print(f"[ChromaDB] Rebuild complete — {count} events embedded.")
 
 
+def rebuild_goals_from_supabase():
+    print("[ChromaDB] Rebuilding goals...")
+
+    result = supabase.table("goals") \
+        .select("user_id, id, title, description") \
+        .execute()
+
+    if not result.data:
+        print("[ChromaDB] No goals found — skipping.")
+        return
+
+    count = 0
+    for row in result.data:
+        try:
+            embed_goal(
+                user_id=row["user_id"],
+                goal_id=row["id"],
+                title=row["title"],
+                description=row.get("description"),
+            )
+            count += 1
+        except Exception as e:
+            print(f"[ChromaDB] Failed to embed goal {row.get('id')}: {e}")
+            continue
+
+    print(f"[ChromaDB] Goals rebuild complete — {count} goals embedded.")
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     rebuild_chroma_from_supabase()
+    rebuild_goals_from_supabase()
     yield
+
 
 
 app = FastAPI(title="DayForge AI Service", lifespan=lifespan)

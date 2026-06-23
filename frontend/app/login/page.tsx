@@ -10,6 +10,7 @@ export default function LoginPage() {
   const [mode, setMode] = useState<Mode>('login')
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
+  const [displayName, setDisplayName] = useState('')
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [signupMessage, setSignupMessage] = useState<string | null>(null)
@@ -32,7 +33,13 @@ export default function LoginPage() {
         router.refresh()
       }
     } else {
-      const { error } = await supabase.auth.signUp({ email, password })
+      const { error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { full_name: displayName.trim() || null }
+        }
+      })
       if (error) {
         setError(error.message)
       } else {
@@ -51,6 +58,15 @@ export default function LoginPage() {
       </h1>
 
       <form onSubmit={handleSubmit} className="space-y-3">
+        {mode === 'signup' && (
+          <input
+            type="text"
+            placeholder="Your name (optional)"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+            className="w-full border rounded px-3 py-2 text-sm"
+          />
+        )}
         <input
           type="email"
           placeholder="Email"
@@ -89,6 +105,7 @@ export default function LoginPage() {
             setMode(mode === 'login' ? 'signup' : 'login')
             setError(null)
             setSignupMessage(null)
+            setDisplayName('')
           }}
           className="text-blue-600 underline"
         >

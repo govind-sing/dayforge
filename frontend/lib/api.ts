@@ -95,3 +95,17 @@ export async function updateBlockedSlot(
   })
   if (!res.ok) throw new Error(await res.text())
 }
+
+export async function getProfile(): Promise<{
+  display_name: string
+  email: string
+  work_start: string
+  work_end: string
+  goals: { id: string; title: string; description: string | null; deadline: string | null; created_at: string }[]
+}> {
+  return apiGet('/api/profile')
+}
+
+export async function updateProfile(body: { work_start?: string; work_end?: string }): Promise<void> {
+  await apiPatch('/api/profile', body)
+}

@@ -6,7 +6,7 @@ from app.chains.schedule_chain import run_schedule_chain, save_schedule
 from datetime import datetime
 import zoneinfo
 import json
-from app.rag.retriever import get_past_patterns
+from app.rag.retriever import get_past_patterns, get_aligned_goals
 router = APIRouter()
 
 
@@ -63,9 +63,10 @@ def build_schedule_request(user_id: str, plan_date: str) -> ScheduleRequest:
         )
         for s in slots_response.data
     ]
-    # 5. Fetch past patterns from ChromaDB
+    # 5. Fetch RAG context
     task_titles = [t.title for t in tasks]
     past_patterns = get_past_patterns(user_id=user_id, task_titles=task_titles)
+    aligned_goals = get_aligned_goals(user_id=user_id, task_titles=task_titles)
 
     return ScheduleRequest(
         plan_date=plan_date,
@@ -74,9 +75,9 @@ def build_schedule_request(user_id: str, plan_date: str) -> ScheduleRequest:
         timezone=tz_name,
         tasks=tasks,
         blocked_slots=blocked_slots,
-        past_patterns=past_patterns,  # new
-    
-    )   
+        past_patterns=past_patterns,
+        aligned_goals=aligned_goals,
+    ) 
 
 
 @router.post("/generate-schedule", response_model=ScheduleResponse)

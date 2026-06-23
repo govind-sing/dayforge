@@ -1,4 +1,5 @@
-from app.core.chroma_client import task_outcomes_collection
+
+from app.core.chroma_client import task_outcomes_collection, goals_collection
 
 
 def embed_task_outcome(
@@ -33,3 +34,23 @@ def embed_task_outcome(
         "date": event_date or "",
 }],
     )
+
+
+
+def embed_goal(user_id: str, goal_id: str, title: str, description: str | None):
+    text = f"{title} | {description}" if description else title
+
+    goals_collection.upsert(
+        ids=[f"{user_id}:{goal_id}"],
+        documents=[text],
+        metadatas=[{
+            "user_id": user_id,
+            "goal_id": goal_id,
+            "title": title,
+            "description": description or "",
+        }],
+    )
+
+
+def delete_goal_embedding(user_id: str, goal_id: str):
+    goals_collection.delete(ids=[f"{user_id}:{goal_id}"])

@@ -21,7 +21,8 @@ class ScheduleRequest(BaseModel):
     timezone: str
     tasks: list[TaskInput]
     blocked_slots: list[BlockedSlotInput]
-    past_patterns: str = ""  # RAG context, empty if no history yet
+    past_patterns: str = ""
+    aligned_goals: str = ""  # goal alignment context from ChromaDB
 
 class ScheduledItem(BaseModel):
     task_id: str

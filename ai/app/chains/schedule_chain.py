@@ -43,6 +43,8 @@ async def run_schedule_chain(request: ScheduleRequest) -> ScheduleResponse:
     # print(f"Blocked:\n{blocked_str}")
     print(f"Past Patterns:\n{request.past_patterns}")
     print("=======================")
+    print(f"Aligned Goals:\n{request.aligned_goals}")
+
     raw_output = await schedule_chain.ainvoke({
         "plan_date": str(request.plan_date),
         "work_start": request.work_start,
@@ -50,7 +52,8 @@ async def run_schedule_chain(request: ScheduleRequest) -> ScheduleResponse:
         "timezone": request.timezone,
         "tasks": format_tasks(request.tasks),
         "blocked_slots": format_blocked_slots(request.blocked_slots),
-        "past_patterns": request.past_patterns,  # RAG context
+        "past_patterns": request.past_patterns,
+        "aligned_goals": request.aligned_goals,
     })
 
     cleaned = raw_output.strip()

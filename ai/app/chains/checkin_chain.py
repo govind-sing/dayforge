@@ -99,6 +99,29 @@ You can take the following actions:
 
 15. general_reply — anything else, follow-ups, motivation, help
 
+15. add_goal — add a long-term goal
+    params: title, description?, deadline? (YYYY-MM-DD)
+    Always confirm what you're adding. Ask for deadline if not given — but it's optional.
+
+16. delete_goal — permanently delete a goal
+    params: goal_id
+    ALWAYS ask for confirmation first using general_reply before firing this action.
+    Use get_all_goals first if goal_id is unknown.
+
+17. extend_deadline — extend a goal's deadline
+    params: goal_id, new_deadline (YYYY-MM-DD)
+    ALWAYS ask why before extending. If reason feels genuine, proceed.
+    If reason is weak (no explanation, vague, or just "I need more time"), extend anyway
+    but add a note in your message that this will affect their alignment score.
+    Use get_all_goals first if goal_id is unknown.
+
+18. get_all_goals — list all user goals with deadlines and IDs
+    No params. Signal: message = "FETCHING_GOALS"
+
+19. get_goal_progress — show completed + skipped tasks aligned with a goal over past N days
+    params: goal_name (natural language), days (default 7)
+    Signal: message = "FETCHING_GOAL_PROGRESS"
+
 NATURAL DATE RULES:
 - "yesterday" → previous day
 - "last monday" / "last week tuesday" → most recent that weekday
@@ -128,7 +151,7 @@ Format:
 {{
   "actions": [
     {{
-      "action": "add_task" | "add_tasks" | "add_to_schedule" | "generate_schedule" | "mark_complete" | "reschedule" | "skip" | "delete_task" | "get_tasks" | "get_all_tasks" | "get_free_slots" | "get_tasks_by_date" | "move_tasks_to_today" | "get_history_by_date" | "general_reply",
+      "action": "add_task" | "add_tasks" | "add_to_schedule" | "generate_schedule" | "mark_complete" | "reschedule" | "skip" | "delete_task" | "get_tasks" | "get_all_tasks" | "get_free_slots" | "get_tasks_by_date" | "move_tasks_to_today" | "get_history_by_date" | "general_reply" | "add_goal" | "delete_goal" | "extend_deadline" | "get_all_goals" | "get_goal_progress",
       "params": {{
         "title": "<if add_task or add_to_schedule>",
         "priority": "<if add_task or add_to_schedule>",
@@ -146,6 +169,13 @@ Format:
         "status_filter": "<if get_tasks_by_date>",
         "from_time": "<HH:MM if get_history_by_date>",
         "to_time": "<HH:MM if get_history_by_date>"
+        "goal_id": "<if delete_goal or extend_deadline>",
+        "goal_name": "<if get_goal_progress>",
+        "new_deadline": "<YYYY-MM-DD if extend_deadline>",
+        "days": <number, if get_goal_progress>,
+        "title": "<if add_goal>",
+        "description": "<if add_goal>",
+        "deadline": "<YYYY-MM-DD if add_goal>"
       }}
     }}
   ],
@@ -157,6 +187,99 @@ Format:
 
 checkin_chain = checkin_prompt | llm | StrOutputParser()
 
+
+def get_goal_progress(user_id: str, goal_name: str, days: int, tz_name: str) -> str:
+    from app.rag.retriever import get_aligned_goals
+    from app.core.chroma_client import goals_collection
+
+    # 1. Find the goal by semantic match
+    try:
+        results = goals_collection.query(
+            query_texts=[goal_name],
+            n_results=1,
+            where={"user_id": user_id},
+            include=["metadatas", "distances"],
+        )
+        metadatas = results.get("metadatas", [[]])[0]
+        distances = results.get("distances", [[]])[0]
+        if not metadatas or distances[0] > 0.7:
+            return f"Couldn't find a goal matching '{goal_name}'. Try being more specific."
+        matched_goal_title = metadatas[0]["title"]
+        matched_goal_id = metadatas[0]["goal_id"]
+    except Exception:
+        return "Couldn't look up goals right now."
+
+    # 2. Fetch completed + skipped task_events for past X days
+    now = datetime.now(zoneinfo.ZoneInfo(tz_name))
+    from_date = (now - timedelta(days=days)).strftime("%Y-%m-%d")
+
+    result = supabase.table("task_events") \
+        .select("task_title, event_type, scheduled_date, scheduled_start, task_id") \
+        .eq("user_id", user_id) \
+        .in_("event_type", ["completed", "skipped"]) \
+        .gte("scheduled_date", from_date) \
+        .execute()
+
+    if not result.data:
+        return f"No activity found in the past {days} days."
+
+    # 3. Filter by goal alignment using ChromaDB
+    from app.core.chroma_client import task_outcomes_collection
+    aligned = []
+    for row in result.data:
+        try:
+            res = goals_collection.query(
+                query_texts=[row["task_title"]],
+                n_results=1,
+                where={"user_id": user_id},
+                include=["metadatas", "distances"],
+            )
+            dists = res.get("distances", [[]])[0]
+            metas = res.get("metadatas", [[]])[0]
+            if dists and dists[0] < 0.5 and metas[0]["goal_id"] == matched_goal_id:
+                aligned.append(row)
+        except Exception:
+            continue
+
+    if not aligned:
+        return f"No tasks aligned with '{matched_goal_title}' found in the past {days} days."
+
+    # 4. Format response
+    completed = [r for r in aligned if r["event_type"] == "completed"]
+    skipped = [r for r in aligned if r["event_type"] == "skipped"]
+
+    lines = [f"Progress toward '{matched_goal_title}' — past {days} days:\n"]
+
+    if completed:
+        lines.append(f"✅ Completed ({len(completed)}):")
+        for r in completed:
+            lines.append(f"  - {r['task_title']} on {r['scheduled_date']}")
+
+    if skipped:
+        lines.append(f"\n⏭️ Planned but skipped ({len(skipped)}):")
+        for r in skipped:
+            lines.append(f"  - {r['task_title']} on {r['scheduled_date']}")
+
+    return "\n".join(lines)
+
+
+def get_all_goals(user_id: str) -> str:
+    result = supabase.table("goals") \
+        .select("id, title, description, deadline") \
+        .eq("user_id", user_id) \
+        .order("created_at") \
+        .execute()
+
+    if not result.data:
+        return "You have no goals yet. Tell me what you're working toward and I'll add it."
+
+    lines = ["Your goals:"]
+    for g in result.data:
+        deadline = f" — due {g['deadline']}" if g["deadline"] else ""
+        desc = f"\n    {g['description']}" if g["description"] else ""
+        lines.append(f"- {g['title']}{deadline} [id: {g['id']}]{desc}")
+
+    return "\n".join(lines)
 
 def load_conversation_history(session_id: str) -> list:
     response = supabase.table("checkin_messages") \
@@ -408,6 +531,15 @@ async def run_checkin_chain(
                 params.get("from_time"), params.get("to_time"),
                 today_date, tz_name,
             )
+        elif action == "get_goal_progress":
+            actions[i]["_result"] = get_goal_progress(
+                user_id,
+                params.get("goal_name", ""),
+                params.get("days", 7),
+                tz_name,
+            )
+        elif action == "get_all_goals":
+            actions[i]["_result"] = get_all_goals(user_id)
 
     parsed["actions"] = actions
 

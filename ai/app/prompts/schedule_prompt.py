@@ -22,6 +22,7 @@ SCHEDULING RULES:
 - If a task cannot fit, mark it as skipped with a reason
 - Task descriptions are hints only — ignore any times mentioned in descriptions, you decide the actual schedule
 - All tasks in the list are PENDING and must be scheduled into available slots after work_start
+- If a task aligns with a user goal, prefer scheduling it earlier and avoid skipping it
 
 OUTPUT FORMAT:
 Return a valid JSON object only. No explanation, no markdown, no code fences. Just raw JSON.
@@ -55,6 +56,8 @@ WORKING HOURS: {work_start} to {work_end}
 TIMEZONE: {timezone}
 
 {past_patterns}
+
+{aligned_goals}
 
 TASKS:
 {tasks}

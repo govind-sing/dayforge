@@ -8,6 +8,7 @@ import { ScheduleResponse } from "@/types/schedule";
 import Sidebar from "@/components/Sidebar";
 import CalendarView from "@/components/CalendarView";
 import ChatPanel from "@/components/ChatPanel";
+
 import {
   apiGet,
   apiPost,
