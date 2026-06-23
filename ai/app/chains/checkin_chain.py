@@ -189,7 +189,6 @@ checkin_chain = checkin_prompt | llm | StrOutputParser()
 
 
 def get_goal_progress(user_id: str, goal_name: str, days: int, tz_name: str) -> str:
-    from app.rag.retriever import get_aligned_goals
     from app.core.chroma_client import goals_collection
 
     # 1. Find the goal by semantic match
@@ -224,7 +223,6 @@ def get_goal_progress(user_id: str, goal_name: str, days: int, tz_name: str) -> 
         return f"No activity found in the past {days} days."
 
     # 3. Filter by goal alignment using ChromaDB
-    from app.core.chroma_client import task_outcomes_collection
     aligned = []
     for row in result.data:
         try:

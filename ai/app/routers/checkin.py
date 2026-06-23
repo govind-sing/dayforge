@@ -8,7 +8,7 @@ from app.routers.schedule import build_schedule_request
 from app.task_event_logger.task_event_logger import (
     log_completed, log_skipped, log_rescheduled, log_deleted
 )
-from app.rag.retriever import get_past_patterns, get_aligned_goals
+from app.rag.retriever import get_aligned_goals
 
 import zoneinfo
 
