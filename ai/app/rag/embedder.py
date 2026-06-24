@@ -1,17 +1,22 @@
-import google.generativeai as genai
+from google import genai
 from app.core.config import settings
 from app.core.chroma_client import task_outcomes_collection, goals_collection
 
-genai.configure(api_key=settings.GEMINI_API_KEY)
+client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 def get_embedding(text: str) -> list[float]:
-    result = genai.embed_content(
-        model="models/gemini-embedding-001",
-        content=text,
-        task_type="SEMANTIC_SIMILARITY",
+    result = client.models.embed_content(
+        model="gemini-embedding-001",
+        contents=text,
     )
-    return result["embedding"]
+    return result.embeddings[0].values
 
+def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
+    result = client.models.embed_content(
+        model="gemini-embedding-001",
+        contents=texts,
+    )
+    return [e.values for e in result.embeddings]
 
 def embed_task_outcome(user_id, task_id, task_title, priority, scheduled_start, event_type, event_date):
     time_str = scheduled_start if scheduled_start else "unscheduled"
@@ -40,7 +45,6 @@ def embed_task_outcome(user_id, task_id, task_title, priority, scheduled_start, 
         }],
     )
 
-
 def embed_goal(user_id, goal_id, title, description):
     text = f"{title} | {description}" if description else title
     embedding = get_embedding(text)
@@ -56,7 +60,6 @@ def embed_goal(user_id, goal_id, title, description):
             "description": description or "",
         }],
     )
-
 
 def delete_goal_embedding(user_id: str, goal_id: str):
     goals_collection.delete(ids=[f"{user_id}:{goal_id}"])

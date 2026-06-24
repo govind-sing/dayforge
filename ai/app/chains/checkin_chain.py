@@ -243,7 +243,7 @@ checkin_chain = checkin_prompt | llm | StrOutputParser()
 
 def get_goal_progress(user_id: str, goal_name: str, days: int, tz_name: str) -> str:
     from app.core.chroma_client import goals_collection
-    from app.rag.embedder import get_embedding
+    from app.rag.embedder import get_embedding, get_embeddings_batch
 
 
     # 1. Find the goal by semantic match
@@ -278,13 +278,18 @@ def get_goal_progress(user_id: str, goal_name: str, days: int, tz_name: str) -> 
     if not result.data:
         return f"No activity found in the past {days} days."
 
-    # 3. Filter by goal alignment using ChromaDB
+# 3. Filter by goal alignment using ChromaDB — batch embed all task titles
+    task_titles = [row["task_title"] for row in result.data]
+    try:
+        batch_embeddings = get_embeddings_batch(task_titles)
+    except Exception:
+        return "Couldn't process task embeddings right now."
+
     aligned = []
-    for row in result.data:
+    for row, embedding in zip(result.data, batch_embeddings):
         try:
-            row_embedding = get_embedding(row["task_title"])
             res = goals_collection.query(
-                query_embeddings=[row_embedding],
+                query_embeddings=[embedding],
                 n_results=1,
                 where={"user_id": user_id},
                 include=["metadatas", "distances"],
@@ -295,6 +300,7 @@ def get_goal_progress(user_id: str, goal_name: str, days: int, tz_name: str) -> 
                 aligned.append(row)
         except Exception:
             continue
+
 
     if not aligned:
         return f"No tasks aligned with '{matched_goal_title}' found in the past {days} days."
