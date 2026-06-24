@@ -243,11 +243,14 @@ checkin_chain = checkin_prompt | llm | StrOutputParser()
 
 def get_goal_progress(user_id: str, goal_name: str, days: int, tz_name: str) -> str:
     from app.core.chroma_client import goals_collection
+    from app.rag.embedder import get_embedding
+
 
     # 1. Find the goal by semantic match
     try:
+        embedding = get_embedding(goal_name)
         results = goals_collection.query(
-            query_texts=[goal_name],
+            query_embeddings=[embedding],
             n_results=1,
             where={"user_id": user_id},
             include=["metadatas", "distances"],
@@ -279,8 +282,9 @@ def get_goal_progress(user_id: str, goal_name: str, days: int, tz_name: str) -> 
     aligned = []
     for row in result.data:
         try:
+            row_embedding = get_embedding(row["task_title"])
             res = goals_collection.query(
-                query_texts=[row["task_title"]],
+                query_embeddings=[row_embedding],
                 n_results=1,
                 where={"user_id": user_id},
                 include=["metadatas", "distances"],
@@ -528,6 +532,8 @@ def get_history_by_date(user_id: str, date: str, from_time: str | None, to_time:
     if slot_lines:
         result += "\nBlocked slots:\n" + "\n".join(slot_lines)
     return result
+
+
 async def run_checkin_chain(
     session_id: str,
     user_id: str,
@@ -542,6 +548,15 @@ async def run_checkin_chain(
     now = datetime.now(zoneinfo.ZoneInfo(tz_name))
     current_time = now.strftime("%H:%M")
     today_date = now.strftime("%Y-%m-%d")
+
+    print("=== JARVIS PROMPT INPUT ===")
+    print(f"SCHEDULE CONTEXT:\n{schedule_context}")
+    print(f"PERSONALITY CONTEXT:\n{personality_context}")
+    print(f"WORK END: {work_end}")
+    print(f"CURRENT TIME: {current_time}")
+    print(f"USER MESSAGE: {user_message}")
+    print(f"HISTORY LENGTH: {len(history)}")
+    print("===========================")
 
     raw_output = await checkin_chain.ainvoke({
         "schedule_context": schedule_context,

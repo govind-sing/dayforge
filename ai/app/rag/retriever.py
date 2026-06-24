@@ -1,3 +1,4 @@
+from app.rag.embedder import get_embedding
 from app.core.chroma_client import task_outcomes_collection, goals_collection
 
 
@@ -11,8 +12,9 @@ def get_past_patterns(user_id: str, task_titles: list[str], n_results: int = 3) 
 
     for title in task_titles:
         try:
+            embedding = get_embedding(title)
             results = task_outcomes_collection.query(
-                query_texts=[title],
+                query_embeddings=[embedding],
                 n_results=n_results,
                 where={"user_id": user_id},
             )
@@ -47,8 +49,9 @@ def get_aligned_goals(user_id: str, task_titles: list[str], threshold: float = 0
 
     for title in task_titles:
         try:
+            embedding = get_embedding(title)
             results = goals_collection.query(
-                query_texts=[title],
+                query_embeddings=[embedding],
                 n_results=1,
                 where={"user_id": user_id},
                 include=["documents", "metadatas", "distances"],
