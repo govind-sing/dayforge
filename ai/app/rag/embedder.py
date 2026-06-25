@@ -1,22 +1,32 @@
-from google import genai
+from openai import OpenAI
 from app.core.config import settings
-from app.core.chroma_client import task_outcomes_collection, goals_collection
+from app.core.chroma_client import (
+    task_outcomes_collection,
+    goals_collection,
+)
 
-client = genai.Client(api_key=settings.GEMINI_API_KEY)
+client = OpenAI(
+    api_key=settings.JINA_API_KEY,
+    base_url="https://api.jina.ai/v1"
+)
+
 
 def get_embedding(text: str) -> list[float]:
-    result = client.models.embed_content(
-        model="gemini-embedding-001",
-        contents=text,
+    result = client.embeddings.create(
+        model="jina-embeddings-v3",
+        input=text,
     )
-    return result.embeddings[0].values
+
+    return result.data[0].embedding
+
 
 def get_embeddings_batch(texts: list[str]) -> list[list[float]]:
-    result = client.models.embed_content(
-        model="gemini-embedding-001",
-        contents=texts,
+    result = client.embeddings.create(
+        model="jina-embeddings-v3",
+        input=texts,
     )
-    return [e.values for e in result.embeddings]
+
+    return [item.embedding for item in result.data]
 
 def embed_task_outcome(user_id, task_id, task_title, priority, scheduled_start, event_type, event_date):
     time_str = scheduled_start if scheduled_start else "unscheduled"

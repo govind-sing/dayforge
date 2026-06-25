@@ -10,6 +10,7 @@ interface Props {
   mediumTasks: TaskFormData[]
   lowTasks: TaskFormData[]
   isGenerating: boolean
+  hasSchedule: boolean
   onGenerate: () => void
   onToggleDone: (taskId: string, isDone: boolean) => void
   onAddTask: (task: Omit<TaskFormData, 'id' | 'status'>) => Promise<void>
@@ -294,6 +295,7 @@ export default function Sidebar({
   mediumTasks,
   lowTasks,
   isGenerating,
+  hasSchedule,
   onGenerate,
   onToggleDone,
   onAddTask,
@@ -368,21 +370,27 @@ export default function Sidebar({
       {/* Generate button */}
       <div className="p-4 border-t space-y-2">
         <p className="text-xs text-center text-gray-400">{date}</p>
-        <button
-          onClick={onGenerate}
-          disabled={isGenerating || allTasks.length === 0}
-          className="w-full py-2.5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-        >
-          {isGenerating ? (
-            <span className="flex items-center justify-center gap-2">
-              <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
-              </svg>
-              Generating...
-            </span>
-          ) : '✨ Generate Schedule'}
-        </button>
+        {hasSchedule ? (
+          <p className="text-xs text-center text-gray-400 py-2">
+            Schedule generated — use Jarvis to add tasks
+          </p>
+        ) : (
+          <button
+            onClick={onGenerate}
+            disabled={isGenerating || allTasks.length === 0}
+            className="w-full py-2.5 bg-violet-600 text-white rounded-lg text-sm font-medium hover:bg-violet-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+          >
+            {isGenerating ? (
+              <span className="flex items-center justify-center gap-2">
+                <svg className="animate-spin w-4 h-4" fill="none" viewBox="0 0 24 24">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+                Generating...
+              </span>
+            ) : '✨ Generate Schedule'}
+          </button>
+        )}
       </div>
     </div>
   )

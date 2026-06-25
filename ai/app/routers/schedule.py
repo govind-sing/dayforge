@@ -63,10 +63,22 @@ def build_schedule_request(user_id: str, plan_date: str) -> ScheduleRequest:
         )
         for s in slots_response.data
     ]
+    
     # 5. Fetch RAG context
     task_titles = [t.title for t in tasks]
     past_patterns = get_past_patterns(user_id=user_id, task_titles=task_titles)
     aligned_goals = get_aligned_goals(user_id=user_id, task_titles=task_titles)
+
+    # 6. Fetch neglected goals — goals with committed day today but no aligned activity
+    from app.rag.alignment import get_neglected_goals
+    neglected = get_neglected_goals(user_id=user_id)
+    if neglected:
+        lines = ["NEGLECTED GOALS (user has not scheduled anything for these today):"]
+        for g in neglected:
+            lines.append(f"- {g['title']} (committed {g['committed_hours']}hr today) — nudge the user to add a task for this")
+        neglected_goals = "\n".join(lines)
+    else:
+        neglected_goals = ""
 
     return ScheduleRequest(
         plan_date=plan_date,
@@ -77,7 +89,8 @@ def build_schedule_request(user_id: str, plan_date: str) -> ScheduleRequest:
         blocked_slots=blocked_slots,
         past_patterns=past_patterns,
         aligned_goals=aligned_goals,
-    ) 
+        neglected_goals=neglected_goals,
+    )
 
 
 @router.post("/generate-schedule", response_model=ScheduleResponse)
@@ -86,6 +99,16 @@ async def generate_schedule(
     user_id: str = Depends(get_current_user_id)
 ):
     try:
+        # One schedule per day — block if already generated
+        existing = supabase.table("daily_plans") \
+            .select("id") \
+            .eq("user_id", user_id) \
+            .eq("plan_date", str(request.plan_date)) \
+            .execute()
+
+        if existing.data:
+            raise HTTPException(status_code=400, detail="Schedule already generated for today. Use Jarvis to add individual tasks.")
+
         schedule = await run_schedule_chain(request)
         await save_schedule(schedule, request, user_id)
         return schedule
@@ -94,7 +117,6 @@ async def generate_schedule(
         raise HTTPException(status_code=500, detail="AI returned invalid JSON — try again")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
 
 @router.get("/schedule/{plan_date}")
 async def get_schedule(

@@ -11,18 +11,22 @@ interface Goal {
   description: string | null;
   deadline: string | null;
   created_at: string;
+  alignment_score: number | null;
+  alignment_updated_at: string | null;
+  committed_days: string[];
+  committed_hours: number;
 }
 
 interface Profile {
-  display_name: string | null
-  email: string
-  work_start: string
-  work_end: string
-  goals: Goal[]
+  display_name: string | null;
+  email: string;
+  work_start: string;
+  work_end: string;
+  personality_context: string | null;
+  goals: Goal[];
 }
 
 function formatTime(t: string) {
-  // "HH:MM:SS" → "HH:MM"
   return t?.slice(0, 5) ?? "";
 }
 
@@ -33,6 +37,63 @@ function formatDeadline(d: string | null) {
     month: "short",
     year: "numeric",
   });
+}
+
+function AlignmentBadge({ score }: { score: number | null }) {
+  if (score === null) return (
+    <span className="text-xs text-gray-400 italic">No data yet</span>
+  );
+
+  const label = score >= 80 ? "improving" : score >= 50 ? "consistent" : "drifting";
+  const color =
+    score >= 80 ? "text-green-600 bg-green-50 border-green-200" :
+    score >= 50 ? "text-yellow-600 bg-yellow-50 border-yellow-200" :
+    "text-red-500 bg-red-50 border-red-200";
+
+  return (
+    <div className="flex items-center gap-2">
+      <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${color}`}>
+        {label}
+      </span>
+      <span className="text-sm font-semibold text-gray-700">{score}%</span>
+    </div>
+  );
+}
+
+function PersonalitySection({ context }: { context: string | null }) {
+  if (!context) return (
+    <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+      <p className="text-sm font-medium text-gray-700 mb-1">Personality insights</p>
+      <p className="text-xs text-gray-400">
+        Complete your first EOD reflection to see insights about how you work.
+      </p>
+    </div>
+  );
+
+  // Parse lines — skip the header line "PERSONALITY INSIGHTS (past 30 days):"
+  const lines = context
+    .split("\n")
+    .filter(l => l.trim() && !l.startsWith("PERSONALITY INSIGHTS"));
+
+  return (
+    <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
+      <p className="text-sm font-medium text-gray-700 mb-4">How you work</p>
+      <ul className="space-y-3">
+        {lines.map((line, i) => {
+          const [label, ...rest] = line.split(":");
+          const value = rest.join(":").trim();
+          return (
+            <li key={i} className="flex flex-col gap-0.5">
+              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
+                {label.trim()}
+              </span>
+              <span className="text-sm text-gray-700">{value}</span>
+            </li>
+          );
+        })}
+      </ul>
+    </div>
+  );
 }
 
 export default function ProfilePage() {
@@ -77,35 +138,37 @@ export default function ProfilePage() {
   return (
     <div className="min-h-screen bg-gray-50 px-6 py-10 max-w-xl mx-auto">
 
-      {/* Back */}
       {/* Header */}
-<div className="flex items-center justify-between mb-8">
-  <button
-    onClick={() => router.push("/dashboard")}
-    className="text-sm text-gray-400 hover:text-gray-600 inline-flex items-center gap-1"
-  >
-    ← Dashboard
-  </button>
-  <button
-    onClick={async () => {
-      const supabase = createClient();
-      await supabase.auth.signOut();
-      router.push("/");
-    }}
-    className="text-sm text-red-400 hover:text-red-600 transition-colors"
-  >
-    Sign out
-  </button>
-</div>
+      <div className="flex items-center justify-between mb-8">
+        <button
+          onClick={() => router.push("/dashboard")}
+          className="text-sm text-gray-400 hover:text-gray-600 inline-flex items-center gap-1"
+        >
+          ← Dashboard
+        </button>
+        <button
+          onClick={async () => {
+            const supabase = createClient();
+            await supabase.auth.signOut();
+            router.push("/");
+          }}
+          className="text-sm text-red-400 hover:text-red-600 transition-colors"
+        >
+          Sign out
+        </button>
+      </div>
 
       {/* Name */}
       <div className="mb-10">
-  <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">You</p>
-  <h1 className="text-2xl font-semibold text-gray-900">
-    {profile.display_name ?? profile.email}
-  </h1>
-  <p className="text-sm text-gray-400 mt-1">{profile.email}</p>
-</div>
+        <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">You</p>
+        <h1 className="text-2xl font-semibold text-gray-900">
+          {profile.display_name ?? profile.email}
+        </h1>
+        <p className="text-sm text-gray-400 mt-1">{profile.email}</p>
+      </div>
+
+      {/* Personality insights */}
+      <PersonalitySection context={profile.personality_context} />
 
       {/* Work hours */}
       <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
@@ -155,21 +218,41 @@ export default function ProfilePage() {
             No goals yet. Tell Jarvis what you&apos;re working toward.
           </p>
         ) : (
-          <ul className="space-y-3">
+          <ul className="space-y-4">
             {profile.goals.map((goal) => (
               <li
                 key={goal.id}
-                className="flex items-start justify-between gap-4 py-3 border-t border-gray-100 first:border-t-0"
+                className="py-4 border-t border-gray-100 first:border-t-0"
               >
-                <div>
-                  <p className="text-sm font-medium text-gray-800">{goal.title}</p>
-                  {goal.description && (
-                    <p className="text-xs text-gray-400 mt-0.5">{goal.description}</p>
-                  )}
+                <div className="flex items-start justify-between gap-4 mb-2">
+                  <div>
+                    <p className="text-sm font-medium text-gray-800">{goal.title}</p>
+                    {goal.description && (
+                      <p className="text-xs text-gray-400 mt-0.5">{goal.description}</p>
+                    )}
+                  </div>
+                  <span className="text-xs text-gray-400 whitespace-nowrap mt-0.5">
+                    {formatDeadline(goal.deadline)}
+                  </span>
                 </div>
-                <span className="text-xs text-gray-400 whitespace-nowrap mt-0.5">
-                  {formatDeadline(goal.deadline)}
-                </span>
+
+                {/* Commitment */}
+                {goal.committed_days?.length > 0 && (
+                  <p className="text-xs text-gray-400 mb-2">
+                    {goal.committed_days.join(", ")} — {goal.committed_hours}hr/day
+                  </p>
+                )}
+
+                {/* Alignment score */}
+                <AlignmentBadge score={goal.alignment_score} />
+
+                {goal.alignment_updated_at && (
+                  <p className="text-xs text-gray-300 mt-1">
+                    Updated {new Date(goal.alignment_updated_at).toLocaleDateString("en-IN", {
+                      day: "numeric", month: "short"
+                    })}
+                  </p>
+                )}
               </li>
             ))}
           </ul>

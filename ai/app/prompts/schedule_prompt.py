@@ -23,6 +23,7 @@ SCHEDULING RULES:
 - Task descriptions are hints only — ignore any times mentioned in descriptions, you decide the actual schedule
 - All tasks in the list are PENDING and must be scheduled into available slots after work_start
 - If a task aligns with a user goal, prefer scheduling it earlier and avoid skipping it
+- If NEGLECTED GOALS are listed, mention them in the summary only — do NOT schedule them, do NOT invent task_ids for them. They are reminders to the user, not tasks in the task list.
 
 OUTPUT FORMAT:
 Return a valid JSON object only. No explanation, no markdown, no code fences. Just raw JSON.
@@ -58,6 +59,10 @@ TIMEZONE: {timezone}
 {past_patterns}
 
 {aligned_goals}
+
+{neglected_goals}
+
+IMPORTANT: Only schedule tasks from the TASKS list below. Never invent task_ids.
 
 TASKS:
 {tasks}

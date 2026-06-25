@@ -14,14 +14,14 @@ class UpdateProfileRequest(BaseModel):
 async def get_profile(user_id: str = Depends(get_current_user_id)):
     try:
         profile_res = supabase.table("profiles").select(
-    "display_name, email, work_start, work_end"
-).eq("id", user_id).single().execute()
+            "display_name, email, work_start, work_end, personality_context"
+        ).eq("id", user_id).single().execute()
 
         if not profile_res.data:
             raise HTTPException(status_code=404, detail="Profile not found")
 
         goals_res = supabase.table("goals").select(
-            "id, title, description, deadline, created_at"
+            "id, title, description, deadline, created_at, alignment_score, alignment_updated_at, committed_days, committed_hours"
         ).eq("user_id", user_id).order("created_at", desc=False).execute()
 
         return {

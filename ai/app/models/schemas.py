@@ -22,7 +22,8 @@ class ScheduleRequest(BaseModel):
     tasks: list[TaskInput]
     blocked_slots: list[BlockedSlotInput]
     past_patterns: str = ""
-    aligned_goals: str = ""  # goal alignment context from ChromaDB
+    aligned_goals: str = ""
+    neglected_goals: str = ""
 
 class ScheduledItem(BaseModel):
     task_id: str

@@ -3,8 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.core.config import settings
-from app.routers import schedule, checkin
-from app.routers import debug as debug_router
+from app.routers import checkin, schedule, debug, alignment
 from app.core.supabase_client import supabase
 from app.rag.embedder import embed_task_outcome, embed_goal
 
@@ -105,7 +104,8 @@ async def global_exception_handler(request: Request, exc: Exception):
 
 app.include_router(schedule.router, prefix="/api/ai")
 app.include_router(checkin.router, prefix="/api/ai")
-app.include_router(debug_router.router)
+app.include_router(debug.router)
+app.include_router(alignment.router, prefix="/api/ai")
 
 @app.get("/health")
 async def health():

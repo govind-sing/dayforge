@@ -44,6 +44,7 @@ async def run_schedule_chain(request: ScheduleRequest) -> ScheduleResponse:
     print(f"Past Patterns:\n{request.past_patterns}")
     print("=======================")
     print(f"Aligned Goals:\n{request.aligned_goals}")
+    print(f"Neglected Goals:\n{request.neglected_goals}")
 
     raw_output = await schedule_chain.ainvoke({
         "plan_date": str(request.plan_date),
@@ -54,6 +55,7 @@ async def run_schedule_chain(request: ScheduleRequest) -> ScheduleResponse:
         "blocked_slots": format_blocked_slots(request.blocked_slots),
         "past_patterns": request.past_patterns,
         "aligned_goals": request.aligned_goals,
+        "neglected_goals": request.neglected_goals,
     })
 
     cleaned = raw_output.strip()

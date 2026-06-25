@@ -101,7 +101,18 @@ export async function getProfile(): Promise<{
   email: string
   work_start: string
   work_end: string
-  goals: { id: string; title: string; description: string | null; deadline: string | null; created_at: string }[]
+  personality_context: string | null
+  goals: {
+    id: string
+    title: string
+    description: string | null
+    deadline: string | null
+    created_at: string
+    alignment_score: number | null
+    alignment_updated_at: string | null
+    committed_days: string[]
+    committed_hours: number
+  }[]
 }> {
   return apiGet('/api/profile')
 }

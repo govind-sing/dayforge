@@ -230,6 +230,7 @@ export default function DashboardPage() {
           highTasks={highTasks}
           mediumTasks={mediumTasks}
           lowTasks={lowTasks}
+          hasSchedule={schedule !== null}
           isGenerating={isGenerating}
           onGenerate={handleGenerate}
           onToggleDone={handleToggleDone}
@@ -253,6 +254,7 @@ export default function DashboardPage() {
           onDateChange={handleDateChange}
           onToggleDone={handleToggleDone}
           completedTaskIds={completedTaskIds}
+          
           onBlockedSlotAdd={async (slot) => {
             const saved = await apiPost<BlockedSlotFormData>(
               "/api/blocked-slots",

@@ -75,3 +75,14 @@ def get_personality_insights(user_id: str, tz_name: str) -> str:
         lines.append("Consistency: No completed tasks yesterday — streak broken.")
 
     return "\n".join(lines)
+
+
+def save_personality_insights(user_id: str, tz_name: str) -> None:
+    """
+    Compute personality insights and save to profiles table.
+    Called at end of EOD flow.
+    """
+    context = get_personality_insights(user_id, tz_name)
+    supabase.table("profiles").update({
+        "personality_context": context,
+    }).eq("id", user_id).execute()

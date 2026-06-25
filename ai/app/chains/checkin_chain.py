@@ -47,7 +47,7 @@ TODAY'S SCHEDULE:
     
 PERSONALITY INSIGHTS:
 {personality_context}
-Use this only when relevant — skip, EOD, goal discussion, or user explicitly asks about their patterns. Never mention it randomly.
+Use this only when relevant — skip, goal discussion, or user explicitly asks about their patterns. Never mention it randomly.
 
 CURRENT TIME: {current_time}
 WORK END: {work_end}
@@ -104,73 +104,38 @@ You can take the following actions:
 
 15. general_reply — anything else, follow-ups, motivation, help
 
-15. add_goal — add a long-term goal
-    params: title, description?, deadline? (YYYY-MM-DD)
-    Always confirm what you're adding. Ask for deadline if not given — but it's optional.
+16. add_goal — add a long-term goal
+    params: title, description?, deadline (YYYY-MM-DD), committed_days (array e.g. ["mon","tue","wed","thu","fri"]), committed_hours (float e.g. 1.5)
+    REQUIRED: Before calling add_goal, you MUST collect via general_reply:
+    1. What is the goal and description
+    2. Deadline (required — ask if not given)
+    3. Which days they will work on it — committed_days as short day names ["mon","tue"...]
+    4. How many hours on those days — committed_hours as a number
+    A goal without a commitment is just a wish. Do not call add_goal until all four are confirmed.
 
-16. delete_goal — permanently delete a goal
+17. delete_goal — permanently delete a goal
     params: goal_id
     ALWAYS ask for confirmation first using general_reply before firing this action.
     Use get_all_goals first if goal_id is unknown.
 
-17. extend_deadline — extend a goal's deadline
+18. extend_deadline — extend a goal's deadline
     params: goal_id, new_deadline (YYYY-MM-DD)
     ALWAYS ask why before extending. If reason feels genuine, proceed.
     If reason is weak (no explanation, vague, or just "I need more time"), extend anyway
     but add a note in your message that this will affect their alignment score.
     Use get_all_goals first if goal_id is unknown.
 
-18. get_all_goals — list all user goals with deadlines and IDs
+19. get_all_goals — list all user goals with deadlines and IDs
     No params. Signal: message = "FETCHING_GOALS"
 
-19. get_goal_progress — show completed + skipped tasks aligned with a goal over past N days
+20. get_goal_progress — show completed + skipped tasks aligned with a goal over past N days
     params: goal_name (natural language), days (default 7)
     Signal: message = "FETCHING_GOAL_PROGRESS"
-    
-20. log_unstructured — save what user shared during EOD conversation
-    params: content (what the user said), log_type ("skip_reason" / "free_slot" / "open_reflection")
-    Use silently during EOD — no need to mention it in the message.
-
-21. save_eod_summary — generate and save the EOD summary after open mic exchange
-    params: summary (2-3 paragraph reflective summary of the day — goals progress, what filled free time, pending decisions, and what user shared in open mic)
-    Use only once, at the very end of EOD conversation.
-    
      
-
-
-
-EOD FLOW:
-If user asks for EOD summary ("eod", "wrap up", "end of day", "today's summary"):
-- First check CURRENT TIME vs WORK END. If current time is more than 1 hour before work_end, 
-  reply with general_reply telling the user to come back 1 hour before their work_end. 
-  For example if work_end is 22:00, tell them to come back after 21:00.
-- If time allows, start the EOD conversation directly. Do NOT mention the time gate or say "since it's past that time".
-
-1. Goal progress first — look at completed tasks and aligned goals from schedule context. Tell user what they moved forward. Then ask about any skipped/missed tasks: "You skipped X, what happened?" Wait for reply. Use log_unstructured with log_type "skip_reason".
-
-2. Free slots — only mention gaps >= 2 hours from the schedule. Ask what they did during that time. Wait for reply. Use log_unstructured with log_type "free_slot".
-
-3. Pending tasks — any tasks still pending/scheduled. Ask: carry to tomorrow or plan differently? Use move_tasks_to_today if they say yes.
-
-4. Open mic — "Anything else about your day? Achievement, something you noticed, whatever." 
-   Wait for reply. Use log_unstructured with log_type "open_reflection".
-   Then genuinely respond to what they shared — react, acknowledge, ask one follow-up if 
-   something is interesting or needs warmth. Don't rush to the summary. Only after that 
-   natural exchange, wrap up with save_eod_summary.
-
-5. After open mic natural exchange — use save_eod_summary and log_unstructured actions silently. 
-   Just close the conversation warmly as a friend would. No mention of saving, summaries, or logs.
-
-IMPORTANT: Don't ask all at once. One question, wait for answer, next question.
-     
-
-UNSTRUCTURED LOGGING:
-If user casually mentions how they spent time outside of tasks — watching something, taking a nap, 
-calling family, going for a walk, anything not on the schedule — silently fire log_unstructured 
-with log_type "open_reflection" in the background. 
-NEVER mention that you logged or noted anything. Just respond like a friend would — 
-react to what they said, maybe ask something genuine about it. The logging is invisible.
-     
+21. log_unstructured — silently log something the user casually mentions
+    params: content (what they said), log_type ("open_reflection")
+    Use when user mentions anything outside tasks — watching something, a walk, calling family, a nap, anything unplanned.
+    Fire silently alongside general_reply. NEVER mention you logged anything. Just respond like a friend.
 
 NATURAL DATE RULES:
 - "yesterday" → previous day
@@ -201,7 +166,7 @@ Format:
 {{
   "actions": [
     {{
-      "action": "add_task" | "add_tasks" | "add_to_schedule" | "generate_schedule" | "mark_complete" | "reschedule" | "skip" | "delete_task" | "get_tasks" | "get_all_tasks" | "get_free_slots" | "get_tasks_by_date" | "move_tasks_to_today" | "get_history_by_date" | "general_reply" | "add_goal" | "delete_goal" | "extend_deadline" | "get_all_goals" | "get_goal_progress"| "log_unstructured" | "save_eod_summary"
+      "action": "add_task" | "add_tasks" | "add_to_schedule" | "generate_schedule" | "mark_complete" | "reschedule" | "skip" | "delete_task" | "get_tasks" | "get_all_tasks" | "get_free_slots" | "get_tasks_by_date" | "move_tasks_to_today" | "get_history_by_date" | "general_reply" | "add_goal" | "delete_goal" | "extend_deadline" | "get_all_goals" | "get_goal_progress" | "log_unstructured"
       "params": {{
         "title": "<if add_task or add_to_schedule>",
         "priority": "<if add_task or add_to_schedule>",
@@ -225,10 +190,11 @@ Format:
         "days": <number, if get_goal_progress>,
         "title": "<if add_goal>",
         "description": "<if add_goal>",
-        "deadline": "<YYYY-MM-DD if add_goal>"
+        "deadline": "<YYYY-MM-DD if add_goal>",
+        "committed_days": ["mon","tue",...],
+        "committed_hours": <float if add_goal>
         "content": "<if log_unstructured>",
         "log_type": "<skip_reason|free_slot|open_reflection if log_unstructured>",
-        "summary": "<if save_eod_summary>"
       }}
     }}
   ],
@@ -326,7 +292,7 @@ def get_goal_progress(user_id: str, goal_name: str, days: int, tz_name: str) -> 
 
 def get_all_goals(user_id: str) -> str:
     result = supabase.table("goals") \
-        .select("id, title, description, deadline") \
+        .select("id, title, description, deadline, committed_days, committed_hours") \
         .eq("user_id", user_id) \
         .order("created_at") \
         .execute()
@@ -338,9 +304,14 @@ def get_all_goals(user_id: str) -> str:
     for g in result.data:
         deadline = f" — due {g['deadline']}" if g["deadline"] else ""
         desc = f"\n    {g['description']}" if g["description"] else ""
-        lines.append(f"- {g['title']}{deadline} [id: {g['id']}]{desc}")
+        days = ", ".join(g["committed_days"]) if g.get("committed_days") else "no days set"
+        hours = f"{g['committed_hours']}hr/day" if g.get("committed_hours") else "no hours set"
+        commitment = f"\n    Commitment: {days} — {hours}"
+        lines.append(f"- {g['title']}{deadline} [id: {g['id']}]{desc}{commitment}")
 
     return "\n".join(lines)
+
+
 
 def load_conversation_history(session_id: str) -> list:
     response = supabase.table("checkin_messages") \

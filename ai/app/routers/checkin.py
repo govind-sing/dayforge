@@ -9,7 +9,7 @@ from app.task_event_logger.task_event_logger import (
     log_completed, log_skipped, log_rescheduled, log_deleted
 )
 from app.rag.retriever import get_aligned_goals
-from app.rag.personality import get_personality_insights
+from app.chains.eod_chain import run_eod_chain
 import zoneinfo
 
 router = APIRouter()
@@ -108,7 +108,7 @@ def get_or_create_session(user_id: str, plan_date: str) -> str:
     return result.data[0]["id"]
 
 
-async def execute_action(action: str, params: dict, user_id: str, plan_date: str, profile: dict, tz_name: str) -> str | None:
+async def execute_action(action: str, params: dict, user_id: str, plan_date: str, profile: dict, tz_name: str, session_id: str = "") -> str | None:
     """
     Execute the action Jarvis decided on.
     Returns an extra message to append if the action produces useful info, else None.
@@ -198,6 +198,7 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
                 }).execute()
             return None
 
+
     elif action == "save_eod_summary":
         summary = params.get("summary")
         if summary:
@@ -206,7 +207,28 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
                 "date": plan_date,
                 "summary": summary,
             }).execute()
+
+            try:
+                supabase.table("checkin_sessions").update({
+                    "eod_completed": True,
+                }).eq("id", session_id).execute()
+            except Exception as e:
+                print(f"Failed to close session: {e}")
+
+            try:
+                from app.rag.alignment import save_goal_alignment_scores
+                await save_goal_alignment_scores(user_id)
+            except Exception as e:
+                print(f"Failed to save alignment scores: {e}")
+
+            try:
+                from app.rag.personality import save_personality_insights
+                save_personality_insights(user_id, tz_name)
+            except Exception as e:
+                print(f"Failed to save personality: {e}")
+
         return None
+    
 
 
     elif action == "move_tasks_to_today":
@@ -248,7 +270,19 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
     elif action == "add_to_schedule":
         title = params.get("title")
 
-        # 1. Check if task already exists in today's tasks
+        # 1. Check if schedule exists for today — required before adding
+        plan = supabase.table("daily_plans") \
+            .select("id") \
+            .eq("user_id", user_id) \
+            .eq("plan_date", plan_date) \
+            .execute()
+
+        if not plan.data:
+            return "Generate your schedule first before adding individual tasks."
+
+        plan_id = plan.data[0]["id"]
+
+        # 2. Check if task already exists in today's tasks
         existing_task = supabase.table("tasks") \
             .select("id, estimated_minutes") \
             .eq("user_id", user_id) \
@@ -257,11 +291,9 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
             .execute()
 
         if existing_task.data:
-            # Reuse existing task
             task_id = existing_task.data[0]["id"]
             estimated = existing_task.data[0]["estimated_minutes"]
         else:
-            # Create new task
             task_result = supabase.table("tasks").insert({
                 "user_id": user_id,
                 "title": title,
@@ -273,24 +305,6 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
             }).execute()
             task_id = task_result.data[0]["id"]
             estimated = params.get("estimated_minutes", 30)
-
-        # 2. Get today's plan_id
-        plan = supabase.table("daily_plans") \
-            .select("id") \
-            .eq("user_id", user_id) \
-            .eq("plan_date", plan_date) \
-            .execute()
-
-        if not plan.data:
-            plan = supabase.table("daily_plans").insert({
-                "user_id": user_id,
-                "plan_date": plan_date,
-                "status": "draft",
-                "raw_llm_output": "",
-                "generation_meta": {}
-            }).execute()
-
-        plan_id = plan.data[0]["id"]
 
         # 3. Determine position
         existing_items = supabase.table("schedule_items") \
@@ -333,16 +347,36 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
 
         return "Added to your schedule! Refresh the calendar to see it."
        
-       
 
     elif action == "generate_schedule":
+        # One schedule per day
+        existing = supabase.table("daily_plans") \
+            .select("id") \
+            .eq("user_id", user_id) \
+            .eq("plan_date", plan_date) \
+            .execute()
+
+        if existing.data:
+            return "You've already generated today's schedule. Use 'add to schedule' to add individual tasks."
+
         request = build_schedule_request(user_id, plan_date)
         if not request.tasks:
             return "No pending tasks found for today — add some tasks first."
+
         schedule = await run_schedule_chain(request)
         await save_schedule(schedule, request, user_id)
-        return "Schedule generated! Refresh the calendar to see it."
+
+        message = "Schedule generated! Refresh the calendar to see it."
+        if request.neglected_goals:
+            from app.rag.alignment import get_neglected_goals
+            neglected = get_neglected_goals(user_id=user_id)
+            if neglected:
+                goal_titles = ", ".join(f"'{g['title']}'" for g in neglected)
+                message += f"\n\nAlso — you haven't planned anything for {goal_titles} today and you committed to working on it. Want me to add a task for it?"
+        return message
     
+
+
     elif action == "mark_complete":
         task_id = params.get("task_id")
         if task_id:
@@ -486,22 +520,26 @@ async def execute_action(action: str, params: dict, user_id: str, plan_date: str
     elif action == "add_goal":
         title = params.get("title")
         description = params.get("description")
-        deadline = params.get("deadline")  # "YYYY-MM-DD" or None
+        deadline = params.get("deadline")
+        committed_days = params.get("committed_days", [])
+        committed_hours = params.get("committed_hours", 0)
 
         result = supabase.table("goals").insert({
             "user_id": user_id,
             "title": title,
             "description": description,
             "deadline": deadline,
+            "committed_days": committed_days,
+            "committed_hours": committed_hours,
         }).execute()
 
         goal_id = result.data[0]["id"]
 
-        # Embed into ChromaDB immediately
         from app.rag.embedder import embed_goal
         embed_goal(user_id=user_id, goal_id=goal_id, title=title, description=description)
 
         return None
+
 
     elif action == "delete_goal":
         goal_id = params.get("goal_id")
@@ -553,7 +591,12 @@ async def checkin_websocket(
     profile = get_user_profile(user_id)
     tz_name = profile["timezone"]
     schedule_context = get_schedule_context(user_id, plan_date, tz_name)
-    personality_context = get_personality_insights(user_id, tz_name) 
+    profile_with_personality = supabase.table("profiles") \
+        .select("personality_context") \
+        .eq("id", user_id) \
+        .single() \
+        .execute()
+    personality_context = (profile_with_personality.data or {}).get("personality_context") or ""
     session_id = get_or_create_session(user_id, plan_date)
 
     try:
@@ -570,6 +613,72 @@ async def checkin_websocket(
                 user_content = data.get("content", "")
 
                 try:
+                    # Check session EOD state fresh each message
+                    session_result = supabase.table("checkin_sessions") \
+                        .select("eod_started, eod_completed") \
+                        .eq("id", session_id) \
+                        .single() \
+                        .execute()
+                    eod_started = session_result.data.get("eod_started", False)
+                    eod_completed = session_result.data.get("eod_completed", False)
+
+                    # Detect EOD trigger from normal mode
+                    eod_triggers = {"eod", "end of day", "wrap up", "summary of day", "daily summary", "day summary"}
+                    is_eod_trigger = any(t in user_content.lower() for t in eod_triggers)
+
+                    if not eod_started and is_eod_trigger:
+                        if eod_completed:
+                            await websocket.send_json({
+                                "type": "stream_chunk",
+                                "content": "EOD is already wrapped up for today. Feel free to keep chatting though!"
+                            })
+                            await websocket.send_json({"type": "stream_end", "actions": []})
+                            continue
+
+                        supabase.table("checkin_sessions").update({
+                            "eod_started": True,
+                        }).eq("id", session_id).execute()
+                        eod_started = True
+
+                    if eod_started and not eod_completed:
+                        # Route to EOD chain
+                        result = await run_eod_chain(
+                            session_id=session_id,
+                            user_id=user_id,
+                            user_message=user_content,
+                            plan_date=plan_date,
+                            work_start=profile["work_start"],
+                            work_end=profile["work_end"],
+                            tz_name=tz_name,
+                        )
+
+                        actions = result.get("actions", [])
+                        for a in actions:
+                            action = a.get("action")
+                            params = a.get("params", {})
+                            if action in ("log_unstructured", "save_eod_summary"):
+                                await execute_action(
+                                    action=action,
+                                    params=params,
+                                    user_id=user_id,
+                                    plan_date=plan_date,
+                                    profile=profile,
+                                    tz_name=tz_name,
+                                    session_id=session_id,
+                                )
+
+                        await websocket.send_json({
+                            "type": "stream_chunk",
+                            "content": result["message"]
+                        })
+                        await websocket.send_json({
+                            "type": "stream_end",
+                            "actions": [a.get("action") for a in actions],
+                            "eod_mode": True,
+                        })
+                        continue
+
+                    # Normal Jarvis — runs when eod not started OR eod already completed
                     result = await run_checkin_chain(
                         session_id=session_id,
                         user_id=user_id,
@@ -588,7 +697,6 @@ async def checkin_websocket(
                         action = a.get("action")
                         params = a.get("params", {})
 
-                        # Skip read-only actions — already handled in chain
                         if "_result" in a:
                             continue
 
@@ -600,15 +708,15 @@ async def checkin_websocket(
                                 plan_date=plan_date,
                                 profile=profile,
                                 tz_name=tz_name,
+                                session_id=session_id,
                             )
                             if extra:
                                 extra_messages.append(extra)
 
-                    # Refresh context after any mutations
                     if any(a.get("action") not in (
                         "general_reply", "get_tasks", "get_all_tasks", "get_free_slots",
                         "get_tasks_by_date", "get_history_by_date", "get_all_goals", "get_goal_progress",
-                        "log_unstructured", "save_eod_summary" 
+                        "log_unstructured"
                     ) for a in actions):
                         schedule_context = get_schedule_context(user_id, plan_date, tz_name)
 
@@ -620,12 +728,10 @@ async def checkin_websocket(
                         "type": "stream_chunk",
                         "content": final_message
                     })
-
-                    # Collect all action types for frontend
-                    action_types = [a.get("action") for a in actions]
                     await websocket.send_json({
                         "type": "stream_end",
-                        "actions": action_types,
+                        "actions": [a.get("action") for a in actions],
+                        "eod_mode": False,
                     })
 
                 except Exception as e:
@@ -635,6 +741,7 @@ async def checkin_websocket(
                         "type": "error",
                         "message": str(e)
                     })
+
     except WebSocketDisconnect:
         print(f"Client disconnected: {user_id}")
 
