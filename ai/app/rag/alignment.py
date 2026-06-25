@@ -248,7 +248,6 @@ async def get_alignment_score(user_id: str) -> dict | None:
     today = date.today()
     last_14_days = [today - timedelta(days=i) for i in range(1, 15)]
 
-    DAY_MAP = {"mon": 0, "tue": 1, "wed": 2, "thu": 3, "fri": 4, "sat": 5, "sun": 6}
 
     # 3. Embed all goal titles in one batch
     goal_titles = [g["title"] for g in goals]
