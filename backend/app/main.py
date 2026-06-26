@@ -29,3 +29,7 @@ app.include_router(profile.router)
 @app.get("/")
 def root():
     return {"status": "DayForge API running"}
+
+
+
+
