@@ -52,66 +52,99 @@ export default function LoginPage() {
   }
 
   return (
-    <main className="max-w-sm mx-auto mt-24 p-6 border rounded-lg space-y-4">
-      <h1 className="text-2xl font-bold text-center">
-        {mode === 'login' ? 'Log in to DayForge' : 'Create your DayForge account'}
-      </h1>
+    <main className="font-dm min-h-screen bg-[#f5f4f0] dark:bg-[#0c0c0b] text-[#0f0e0c] dark:text-[#f0ede8] flex items-center justify-center p-6">
+      <div className="w-full max-w-sm">
+        {/* Logo / Brand */}
+        <div className="text-center mb-10">
+          <div className="inline-flex items-center justify-center w-16 h-16 rounded-3xl bg-[#0f0e0c] dark:bg-[#f0ede8] mb-6">
+            <span className="font-syne text-4xl font-black text-[#f5f4f0] dark:text-[#0c0c0b] tracking-tighter">DF</span>
+          </div>
+          <h1 className="font-syne text-4xl font-bold tracking-tight">DayForge</h1>
+          <p className="text-stone-400 dark:text-stone-600 mt-1">Focus. Build. Repeat.</p>
+        </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3">
-        {mode === 'signup' && (
-          <input
-            type="text"
-            placeholder="Your name (optional)"
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-            className="w-full border rounded px-3 py-2 text-sm"
-          />
-        )}
-        <input
-          type="email"
-          placeholder="Email"
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-          required
-          className="w-full border rounded px-3 py-2 text-sm"
-        />
-        <input
-          type="password"
-          placeholder="Password"
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          required
-          minLength={6}
-          className="w-full border rounded px-3 py-2 text-sm"
-        />
+        <div className="bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-3xl p-8 shadow-sm">
+          <h2 className="font-syne text-2xl font-bold text-center mb-8">
+            {mode === 'login' ? 'Welcome back' : 'Create your account'}
+          </h2>
 
-        {error && <p className="text-red-600 text-sm">{error}</p>}
-        {signupMessage && <p className="text-green-600 text-sm">{signupMessage}</p>}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            {mode === 'signup' && (
+              <div>
+                <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-600 mb-1.5">YOUR NAME</p>
+                <input
+                  type="text"
+                  placeholder="Alex Rivera"
+                  value={displayName}
+                  onChange={(e) => setDisplayName(e.target.value)}
+                  className="w-full bg-white dark:bg-[#0c0c0b] border border-stone-200 dark:border-stone-800 rounded-2xl px-4 py-3 text-[15px] outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors"
+                />
+              </div>
+            )}
 
-        <button
-          type="submit"
-          disabled={loading}
-          className="w-full bg-black text-white rounded px-4 py-2 text-sm"
-        >
-          {loading ? 'Please wait...' : mode === 'login' ? 'Log In' : 'Sign Up'}
-        </button>
-      </form>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-600 mb-1.5">EMAIL</p>
+              <input
+                type="email"
+                placeholder="you@email.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                required
+                className="w-full bg-white dark:bg-[#0c0c0b] border border-stone-200 dark:border-stone-800 rounded-2xl px-4 py-3 text-[15px] outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors"
+              />
+            </div>
 
-      <p className="text-sm text-center text-gray-600">
-        {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
-        <button
-          type="button"
-          onClick={() => {
-            setMode(mode === 'login' ? 'signup' : 'login')
-            setError(null)
-            setSignupMessage(null)
-            setDisplayName('')
-          }}
-          className="text-blue-600 underline"
-        >
-          {mode === 'login' ? 'Sign up' : 'Log in'}
-        </button>
-      </p>
+            <div>
+              <p className="text-[10px] font-bold uppercase tracking-widest text-stone-400 dark:text-stone-600 mb-1.5">PASSWORD</p>
+              <input
+                type="password"
+                placeholder="••••••••"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                required
+                minLength={6}
+                className="w-full bg-white dark:bg-[#0c0c0b] border border-stone-200 dark:border-stone-800 rounded-2xl px-4 py-3 text-[15px] outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors"
+              />
+            </div>
+
+            {error && <p className="text-rose-500 text-sm text-center">{error}</p>}
+            {signupMessage && <p className="text-emerald-600 dark:text-emerald-500 text-sm text-center">{signupMessage}</p>}
+
+            <button
+              type="submit"
+              disabled={loading}
+              className="w-full bg-[#0f0e0c] dark:bg-[#f0ede8] hover:bg-black dark:hover:bg-white text-[#f5f4f0] dark:text-[#0c0c0b] font-semibold rounded-2xl py-3.5 text-[15px] transition-all disabled:opacity-60 mt-2"
+            >
+              {loading 
+                ? 'Please wait...' 
+                : mode === 'login' 
+                  ? 'Sign In' 
+                  : 'Create Account'
+              }
+            </button>
+          </form>
+
+          <p className="text-center text-sm text-stone-400 dark:text-stone-600 mt-8">
+            {mode === 'login' ? "Don't have an account?" : 'Already have an account?'}{' '}
+            <button
+              type="button"
+              onClick={() => {
+                setMode(mode === 'login' ? 'signup' : 'login')
+                setError(null)
+                setSignupMessage(null)
+                setDisplayName('')
+              }}
+              className="text-[#0f0e0c] dark:text-[#f0ede8] hover:underline font-medium"
+            >
+              {mode === 'login' ? 'Sign up' : 'Log in'}
+            </button>
+          </p>
+        </div>
+
+        <p className="text-center text-[11px] text-stone-400 dark:text-stone-600 mt-8">
+          By signing up you agree to our Terms and Privacy Policy
+        </p>
+      </div>
     </main>
   )
 }

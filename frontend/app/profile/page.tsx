@@ -31,7 +31,7 @@ function formatTime(t: string) {
 }
 
 function formatDeadline(d: string | null) {
-  if (!d) return "No deadline";
+  if (!d) return "—";
   return new Date(d).toLocaleDateString("en-IN", {
     day: "numeric",
     month: "short",
@@ -40,59 +40,24 @@ function formatDeadline(d: string | null) {
 }
 
 function AlignmentBadge({ score }: { score: number | null }) {
-  if (score === null) return (
-    <span className="text-xs text-gray-400 italic">No data yet</span>
-  );
+  if (score === null)
+    return <span className="text-[11px] text-stone-400 dark:text-stone-600 italic">no data yet</span>;
 
   const label = score >= 80 ? "improving" : score >= 50 ? "consistent" : "drifting";
-  const color =
-    score >= 80 ? "text-green-600 bg-green-50 border-green-200" :
-    score >= 50 ? "text-yellow-600 bg-yellow-50 border-yellow-200" :
-    "text-red-500 bg-red-50 border-red-200";
+  const cls =
+    score >= 80
+      ? "text-emerald-500 border-emerald-500/20 bg-emerald-500/5"
+      : score >= 50
+      ? "text-amber-500 border-amber-500/20 bg-amber-500/5"
+      : "text-rose-500 border-rose-500/20 bg-rose-500/5";
+  const dot =
+    score >= 80 ? "bg-emerald-500" : score >= 50 ? "bg-amber-500" : "bg-rose-500";
 
   return (
-    <div className="flex items-center gap-2">
-      <span className={`text-xs font-medium px-2 py-0.5 rounded-full border ${color}`}>
-        {label}
-      </span>
-      <span className="text-sm font-semibold text-gray-700">{score}%</span>
-    </div>
-  );
-}
-
-function PersonalitySection({ context }: { context: string | null }) {
-  if (!context) return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-      <p className="text-sm font-medium text-gray-700 mb-1">Personality insights</p>
-      <p className="text-xs text-gray-400">
-        Complete your first EOD reflection to see insights about how you work.
-      </p>
-    </div>
-  );
-
-  // Parse lines — skip the header line "PERSONALITY INSIGHTS (past 30 days):"
-  const lines = context
-    .split("\n")
-    .filter(l => l.trim() && !l.startsWith("PERSONALITY INSIGHTS"));
-
-  return (
-    <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-      <p className="text-sm font-medium text-gray-700 mb-4">How you work</p>
-      <ul className="space-y-3">
-        {lines.map((line, i) => {
-          const [label, ...rest] = line.split(":");
-          const value = rest.join(":").trim();
-          return (
-            <li key={i} className="flex flex-col gap-0.5">
-              <span className="text-xs font-medium text-gray-500 uppercase tracking-wide">
-                {label.trim()}
-              </span>
-              <span className="text-sm text-gray-700">{value}</span>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+    <span className={`inline-flex items-center gap-1.5 text-[10px] font-semibold tracking-widest uppercase px-3 py-1 rounded-full border ${cls}`}>
+      <span className={`w-1.5 h-1.5 rounded-full ${dot}`} />
+      {label} · {score}%
+    </span>
   );
 }
 
@@ -106,11 +71,13 @@ export default function ProfilePage() {
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    getProfile().then((p) => {
-      setProfile(p);
-      setWorkStart(formatTime(p.work_start));
-      setWorkEnd(formatTime(p.work_end));
-    }).catch(() => setError("Failed to load profile."));
+    getProfile()
+      .then((p) => {
+        setProfile(p);
+        setWorkStart(formatTime(p.work_start));
+        setWorkEnd(formatTime(p.work_end));
+      })
+      .catch(() => setError("Failed to load profile."));
   }, []);
 
   const handleSave = async () => {
@@ -129,135 +96,207 @@ export default function ProfilePage() {
 
   if (!profile) {
     return (
-      <div className="flex h-screen items-center justify-center bg-gray-50 text-gray-400 text-sm">
-        Loading...
+      <div className="flex h-screen items-center justify-center bg-[#f5f4f0] dark:bg-[#0c0c0b]">
+        <div className="flex gap-1.5">
+          {[0, 150, 300].map((d) => (
+            <span
+              key={d}
+              className="w-1.5 h-1.5 rounded-full bg-stone-400 dark:bg-stone-700 animate-bounce"
+              style={{ animationDelay: `${d}ms` }}
+            />
+          ))}
+        </div>
       </div>
     );
   }
 
+  const name = profile.display_name ?? profile.email.split("@")[0];
+  const initials = name
+    .split(" ")
+    .map((w: string) => w[0])
+    .slice(0, 2)
+    .join("")
+    .toUpperCase();
+
+  const personalityLines = (profile.personality_context ?? "")
+    .split("\n")
+    .filter((l) => l.trim() && !l.startsWith("PERSONALITY INSIGHTS"));
+
   return (
-    <div className="min-h-screen bg-gray-50 px-6 py-10 max-w-xl mx-auto">
+    <>
+      <style>{`
+        @import url('https://fonts.googleapis.com/css2?family=Syne:wght@700;800&family=DM+Sans:ital,wght@0,300;0,400;0,500;1,300&display=swap');
+        .font-syne { font-family: 'Syne', sans-serif; }
+        .font-dm { font-family: 'DM Sans', sans-serif; }
+        input[type="time"]::-webkit-calendar-picker-indicator { opacity: 0.35; }
+        @media (prefers-color-scheme: dark) {
+          input[type="time"]::-webkit-calendar-picker-indicator { filter: invert(1); opacity: 0.35; }
+        }
+      `}</style>
 
-      {/* Header */}
-      <div className="flex items-center justify-between mb-8">
-        <button
-          onClick={() => router.push("/dashboard")}
-          className="text-sm text-gray-400 hover:text-gray-600 inline-flex items-center gap-1"
-        >
-          ← Dashboard
-        </button>
-        <button
-          onClick={async () => {
-            const supabase = createClient();
-            await supabase.auth.signOut();
-            router.push("/");
-          }}
-          className="text-sm text-red-400 hover:text-red-600 transition-colors"
-        >
-          Sign out
-        </button>
-      </div>
+      <div className="font-dm min-h-screen w-full bg-[#f5f4f0] dark:bg-[#0c0c0b] text-[#0f0e0c] dark:text-[#f0ede8]">
 
-      {/* Name */}
-      <div className="mb-10">
-        <p className="text-xs text-gray-400 uppercase tracking-widest mb-1">You</p>
-        <h1 className="text-2xl font-semibold text-gray-900">
-          {profile.display_name ?? profile.email}
-        </h1>
-        <p className="text-sm text-gray-400 mt-1">{profile.email}</p>
-      </div>
+        {/* ── Nav ── */}
+        <nav className="sticky top-0 z-20 w-full h-13 px-5 flex items-center justify-between border-b border-stone-200 dark:border-stone-800/60 bg-[#f5f4f0]/75 dark:bg-[#0c0c0b]/75 backdrop-blur-md">
+          <button
+            onClick={() => router.push("/dashboard")}
+            className="text-[13px] text-stone-400 dark:text-stone-600 hover:text-[#0f0e0c] dark:hover:text-[#f0ede8] transition-colors duration-150 flex items-center gap-1.5"
+          >
+            ← dashboard
+          </button>
+          <button
+            onClick={async () => { const s = createClient(); await s.auth.signOut(); router.push("/"); }}
+            className="text-[13px] text-stone-400 dark:text-stone-600 hover:text-rose-500 transition-colors duration-150"
+          >
+            sign out
+          </button>
+        </nav>
 
-      {/* Personality insights */}
-      <PersonalitySection context={profile.personality_context} />
+        {/* ── Hero ── */}
+        <section className="w-full px-5 pt-14 pb-12 border-b border-stone-200 dark:border-stone-800/60 relative overflow-hidden">
+          {/* Ghost initials */}
+          <div className="font-syne absolute -top-4 -right-2 text-[clamp(96px,22vw,220px)] font-black leading-none text-stone-200 dark:text-stone-800/60 select-none pointer-events-none tracking-tighter">
+            {initials}
+          </div>
 
-      {/* Work hours */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6 mb-6">
-        <p className="text-sm font-medium text-gray-700 mb-4">Work hours</p>
-        <div className="flex gap-4 items-center">
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-400">Start</label>
+          <div className="relative">
+            <p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-stone-400 dark:text-stone-600 mb-4">
+              your space
+            </p>
+            <h1 className="font-syne text-[clamp(40px,10vw,96px)] font-black leading-[0.92] tracking-tight text-[#0f0e0c] dark:text-[#f0ede8] mb-5 warp-break-words">
+              {name}
+            </h1>
+            <p className="text-sm text-stone-400 dark:text-stone-600 italic font-light">
+              {profile.email}
+            </p>
+          </div>
+        </section>
+
+        {/* ── Work hours ── */}
+        <section className="w-full px-5 py-6 border-b border-stone-200 dark:border-stone-800/60">
+          <p className="font-syne text-[10px] font-bold uppercase tracking-[0.14em] text-stone-400 dark:text-stone-600 mb-4">
+            Work window
+          </p>
+          <div className="flex flex-wrap items-center gap-2.5">
             <input
               type="time"
               value={workStart}
               onChange={(e) => setWorkStart(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              className="font-dm w-29 bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-[#0f0e0c] dark:text-[#f0ede8] rounded-xl px-3 py-2 text-[13px] outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors"
             />
-          </div>
-          <div className="flex flex-col gap-1">
-            <label className="text-xs text-gray-400">End</label>
+            <span className="text-stone-400 dark:text-stone-600 text-sm">→</span>
             <input
               type="time"
               value={workEnd}
               onChange={(e) => setWorkEnd(e.target.value)}
-              className="border border-gray-200 rounded-lg px-3 py-2 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-gray-300"
+              className="font-dm w-29 bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 text-[#0f0e0c] dark:text-[#f0ede8] rounded-xl px-3 py-2 text-[13px] outline-none focus:border-stone-400 dark:focus:border-stone-600 transition-colors"
             />
+            <button
+              onClick={handleSave}
+              disabled={saving}
+              className={`px-4 py-2 rounded-xl text-[13px] font-semibold transition-all duration-200 disabled:opacity-40 ${
+                saved
+                  ? "bg-emerald-500/10 text-emerald-500 border border-emerald-500/20"
+                  : "bg-[#0f0e0c] dark:bg-[#f0ede8] text-[#f5f4f0] dark:text-[#0c0c0b] hover:opacity-80"
+              }`}
+            >
+              {saving ? "saving…" : saved ? "saved ✓" : "save"}
+            </button>
           </div>
-          <button
-            onClick={handleSave}
-            disabled={saving}
-            className="mt-5 px-4 py-2 bg-gray-900 text-white text-sm rounded-lg hover:bg-gray-700 disabled:opacity-50 transition-colors"
-          >
-            {saving ? "Saving..." : saved ? "Saved ✓" : "Save"}
-          </button>
-        </div>
-        {error && <p className="text-xs text-red-500 mt-3">{error}</p>}
-      </div>
+          {error && <p className="text-xs text-rose-500 mt-3">{error}</p>}
+        </section>
 
-      {/* Goals */}
-      <div className="bg-white border border-gray-200 rounded-xl p-6">
-        <div className="flex items-center justify-between mb-1">
-          <p className="text-sm font-medium text-gray-700">Goals</p>
-          <span className="text-xs text-gray-400">Managed by Jarvis</span>
-        </div>
-        <p className="text-xs text-gray-400 mb-5">
-          Ask Jarvis to add or update goals. Deadlines can only be extended with a good reason.
-        </p>
+        {/* ── Personality ── */}
+        {personalityLines.length > 0 && (
+          <section className="w-full px-5 py-10 border-b border-stone-200 dark:border-stone-800/60">
+            <p className="font-syne text-[10px] font-bold uppercase tracking-[0.14em] text-stone-400 dark:text-stone-600 mb-6">
+              How you operate
+            </p>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-0.5">
+              {personalityLines.map((line, i) => {
+                const colonIdx = line.indexOf(":");
+                const label = colonIdx !== -1 ? line.slice(0, colonIdx).trim() : line;
+                const value = colonIdx !== -1 ? line.slice(colonIdx + 1).trim() : "";
+                return (
+                  <div
+                    key={i}
+                    className="bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 rounded-2xl p-5"
+                  >
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-stone-400 dark:text-stone-600 mb-2">
+                      {label}
+                    </p>
+                    <p className="text-sm text-stone-600 dark:text-stone-400 leading-relaxed">
+                      {value}
+                    </p>
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        )}
 
-        {profile.goals.length === 0 ? (
-          <p className="text-sm text-gray-400 italic">
-            No goals yet. Tell Jarvis what you&apos;re working toward.
+        {/* ── Goals ── */}
+        <section className="w-full px-5 pt-10 pb-20">
+          <div className="flex items-baseline justify-between mb-1.5">
+            <p className="font-syne text-[10px] font-bold uppercase tracking-[0.14em] text-stone-400 dark:text-stone-600">
+              Goals
+            </p>
+            <span className="text-[11px] text-stone-400 dark:text-stone-600 italic">managed by Jarvis</span>
+          </div>
+          <p className="text-[13px] text-stone-400 dark:text-stone-600 font-light leading-relaxed mb-8">
+            Ask Jarvis to add or update goals. Deadlines extend only with a good reason.
           </p>
-        ) : (
-          <ul className="space-y-4">
-            {profile.goals.map((goal) => (
-              <li
-                key={goal.id}
-                className="py-4 border-t border-gray-100 first:border-t-0"
-              >
-                <div className="flex items-start justify-between gap-4 mb-2">
-                  <div>
-                    <p className="text-sm font-medium text-gray-800">{goal.title}</p>
-                    {goal.description && (
-                      <p className="text-xs text-gray-400 mt-0.5">{goal.description}</p>
+
+          {profile.goals.length === 0 ? (
+            <p className="text-sm text-stone-400 dark:text-stone-600 italic">
+              No goals yet. Tell Jarvis what you&apos;re working toward.
+            </p>
+          ) : (
+            <div className="flex flex-col gap-0.5">
+              {profile.goals.map((goal) => (
+                <div
+                  key={goal.id}
+                  className="bg-stone-100 dark:bg-stone-900 border border-stone-200 dark:border-stone-800 hover:border-stone-400 dark:hover:border-stone-600 rounded-2xl p-5 flex flex-col gap-2.5 transition-colors duration-150"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <p className="font-syne text-[clamp(16px,3.5vw,20px)] font-bold text-[#0f0e0c] dark:text-[#f0ede8] leading-tight tracking-tight flex-1 min-w-0">
+                      {goal.title}
+                    </p>
+                    <span className="text-[11px] text-stone-400 dark:text-stone-600 whitespace-nowrap mt-0.5 shrink-0 font-light">
+                      {formatDeadline(goal.deadline)}
+                    </span>
+                  </div>
+
+                  {goal.description && (
+                    <p className="text-[13px] text-stone-500 dark:text-stone-500 font-light leading-relaxed">
+                      {goal.description}
+                    </p>
+                  )}
+
+                  {goal.committed_days?.length > 0 && (
+                    <p className="text-[10px] font-bold uppercase tracking-[0.13em] text-stone-400 dark:text-stone-600">
+                      {goal.committed_days.join(" · ")} — {goal.committed_hours}hr/day
+                    </p>
+                  )}
+
+                  <div className="flex items-center justify-between flex-wrap gap-2">
+                    <AlignmentBadge score={goal.alignment_score} />
+                    {goal.alignment_updated_at && (
+                      <p className="text-[11px] text-stone-400 dark:text-stone-600 font-light">
+                        updated{" "}
+                        {new Date(goal.alignment_updated_at).toLocaleDateString("en-IN", {
+                          day: "numeric",
+                          month: "short",
+                        })}
+                      </p>
                     )}
                   </div>
-                  <span className="text-xs text-gray-400 whitespace-nowrap mt-0.5">
-                    {formatDeadline(goal.deadline)}
-                  </span>
                 </div>
-
-                {/* Commitment */}
-                {goal.committed_days?.length > 0 && (
-                  <p className="text-xs text-gray-400 mb-2">
-                    {goal.committed_days.join(", ")} — {goal.committed_hours}hr/day
-                  </p>
-                )}
-
-                {/* Alignment score */}
-                <AlignmentBadge score={goal.alignment_score} />
-
-                {goal.alignment_updated_at && (
-                  <p className="text-xs text-gray-300 mt-1">
-                    Updated {new Date(goal.alignment_updated_at).toLocaleDateString("en-IN", {
-                      day: "numeric", month: "short"
-                    })}
-                  </p>
-                )}
-              </li>
-            ))}
-          </ul>
-        )}
+              ))}
+            </div>
+          )}
+        </section>
       </div>
-    </div>
+    </>
   );
 }
