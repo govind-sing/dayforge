@@ -183,14 +183,15 @@ export default function DashboardPage() {
   };
 
   const handleAddTask = async (task: Omit<TaskFormData, "id" | "status">): Promise<void> => {
-    await apiPost<TaskFormData>("/api/tasks/daily-plan", {
-      plan_date: date,
-      tasks: [...highTasks, ...mediumTasks, ...lowTasks, task].filter(
-        (t) => t.title.trim() !== "",
-      ),
-    });
-    await loadData(date);
-  };
+  await apiPost<TaskFormData>("/api/tasks/daily-plan", {
+    plan_date: date,
+    title: task.title,
+    description: task.description ?? '',
+    estimated_minutes: task.estimated_minutes,
+    priority: task.priority,
+  });
+  await loadData(date);
+};
 
   const handleEditTask = async (taskId: string, updates: Partial<TaskFormData>): Promise<void> => {
     await apiPatch(`/api/tasks/${taskId}`, updates);

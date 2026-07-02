@@ -67,3 +67,10 @@ class BlockedSlotOut(BlockedSlotInput):
 class BlockedSlotUpdate(BaseModel):
     start_time: time
     end_time: time
+
+class SingleTaskInput(BaseModel):
+    plan_date: date
+    title: str
+    description: Optional[str] = None
+    estimated_minutes: int = Field(gt=0, le=480)
+    priority: Literal["high", "medium", "low"]

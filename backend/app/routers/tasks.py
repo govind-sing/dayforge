@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException
 from app.core.supabase_client import supabase
 from app.core.auth import get_current_user_id
-from app.models.schemas import TaskUpdate, DailyPlanInput
+from app.models.schemas import TaskUpdate, SingleTaskInput
 from uuid import UUID
 from datetime import date
 from datetime import date as date_type
@@ -9,43 +9,30 @@ from datetime import date as date_type
 router = APIRouter(prefix="/api/tasks", tags=["tasks"])
 
 
+
+
 @router.post("/daily-plan")
-def create_daily_plan(payload: DailyPlanInput, user_id: str = Depends(get_current_user_id)):
+def create_daily_plan(payload: SingleTaskInput, user_id: str = Depends(get_current_user_id)):
     """
-    Replaces the day's tasks with the submitted set.
-    Simple re-submission model: wipe and recreate for this date.
+    Adds a single task without touching existing tasks for the day.
     """
-    plan_date_str = payload.plan_date.isoformat()
+    task_row = {
+        "user_id": user_id,
+        "title": payload.title,
+        "description": payload.description,
+        "estimated_minutes": payload.estimated_minutes,
+        "priority": payload.priority,
+        "original_date": payload.plan_date.isoformat(),
+        "status": "pending",
+    }
+    try:
+        inserted = supabase.table("tasks").insert(task_row).execute().data
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    return inserted[0]
 
-    # Clear existing tasks for this user+date (handles re-submission)
-    supabase.table("tasks") \
-        .delete() \
-        .eq("user_id", user_id) \
-        .eq("original_date", plan_date_str) \
-        .execute()
 
-    task_rows = [
-        {
-            "user_id": user_id,
-            "title": t.title,
-            "description": t.description,
-            "estimated_minutes": t.estimated_minutes,
-            "priority": t.priority,
-            "original_date": plan_date_str,
-            "status": "pending",
-        }
-        for t in payload.tasks
-    ]
 
-    inserted = []
-    if task_rows:
-        try:
-            inserted = supabase.table("tasks").insert(task_rows).execute().data
-        except Exception as e:
-            print("DAILY PLAN INSERT ERROR:", repr(e))
-            raise HTTPException(status_code=400, detail=str(e))
-
-    return {"plan_date": plan_date_str, "tasks": inserted}
 
 
 @router.get("/daily-plan")
