@@ -156,5 +156,5 @@ Requires: Docker, Node.js 20+, a Supabase project, and a Gemini API key.
 
 ## Live Demo
 
-Frontend: [dayforge.vercel.app](https://day-forge-ten.vercel.app/profile)  
+Frontend: [dayforge.vercel.app](https://day-forge-ten.vercel.app/)  
 GitHub: [github.com/govind-sing/dayforge](https://github.com/govind-sing/dayforge)
